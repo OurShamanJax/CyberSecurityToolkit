@@ -1,0 +1,132 @@
+{
+  "_comment": "Plain-English explanations for findings. Keyed by Nuclei template id (or a substring match), with severity-based fallbacks. Used by the report generator and the in-app export. Add entries freely.",
+  "generic": {
+    "critical": {
+      "plain": "A critical-severity issue was flagged. In plain terms: this is the kind of hole that can let an attacker take over the system or steal large amounts of data with little effort. Treat it as urgent.",
+      "why": "Critical issues usually mean full compromise is possible - remote takeover, mass data theft, or administrator access.",
+      "fix": [
+        "Confirm the finding by hand, then patch or reconfigure the affected component immediately.",
+        "If it can't be fixed at once, take the service offline or block access until it can."
+      ]
+    },
+    "high": {
+      "plain": "A high-severity issue was flagged. In plain terms: an attacker could do real damage here - access data they shouldn't, or gain a significant foothold - though it may take a bit more effort than a critical issue.",
+      "why": "High issues often allow access to sensitive data or a meaningful step toward taking over the system.",
+      "fix": [
+        "Verify the finding, then prioritise a fix in the current work cycle.",
+        "Add monitoring/alerting for attempts to exploit it in the meantime."
+      ]
+    },
+    "medium": {
+      "plain": "A medium-severity issue was flagged. In plain terms: this usually isn't a direct break-in by itself, but it either leaks helpful information to an attacker or weakens a defence, making other attacks easier.",
+      "why": "Medium issues typically expose information or misconfigurations that assist an attacker rather than handing them the keys directly.",
+      "fix": [
+        "Verify the finding, then fix it as part of normal maintenance.",
+        "Reduce what the system exposes to only what is necessary."
+      ]
+    },
+    "low": {
+      "plain": "A low-severity issue was flagged. In plain terms: a minor weakness or small information leak. On its own it's unlikely to cause harm, but it's still worth tidying up.",
+      "why": "Low issues are best-practice gaps that add up over time or help an attacker in small ways.",
+      "fix": [
+        "Note it and fix when convenient.",
+        "Follow the vendor's hardening guidance for the component."
+      ]
+    },
+    "info": {
+      "plain": "An informational item was flagged. In plain terms: this is something the scanner noticed about the target (a technology, a header, an open page). It's not a vulnerability by itself, but it's useful context.",
+      "why": "Informational findings describe the target and help plan further testing.",
+      "fix": [
+        "No fix required. Review whether the exposed detail is something you'd rather keep private."
+      ]
+    }
+  },
+  "templates": {
+    "prometheus-metrics": {
+      "title": "Exposed monitoring / metrics page",
+      "plain": "This app has a status page (at /metrics) that anyone can open without logging in. It's meant only for the app's own monitoring tools, but here it's left open to the public. Think of it like a shop pinning its stockroom clipboard - deliveries, staff notes, supplier names - to the front door. On its own it doesn't let anyone rob the shop, but it hands a would-be burglar a lot of useful inside information to plan with.",
+      "why": "The page leaks technical detail - what software and versions the app runs, its internal web addresses, and how busy each part is. An attacker uses this to work out where the weak spots are and which known attacks to try, turning guesswork into a targeted plan.",
+      "fix": [
+        "Require a login (or a secret token) to view the /metrics page.",
+        "Only allow the monitoring server to reach it - block it from the public internet.",
+        "If you don't use the metrics, turn the page off entirely.",
+        "Re-check by opening /metrics without logging in; it should refuse you."
+      ]
+    },
+    "missing-security-headers": {
+      "title": "Missing security headers",
+      "plain": "Web pages can send invisible 'safety instructions' to the browser (called security headers) that tell it how to protect the user. This site is missing some of them, so the browser isn't being told to switch on protections it otherwise could.",
+      "why": "Without these instructions, common attacks like clickjacking or script injection are easier to pull off against the site's users.",
+      "fix": [
+        "Add the recommended security headers (for example Content-Security-Policy, X-Frame-Options, and Strict-Transport-Security).",
+        "Re-scan to confirm the headers now appear."
+      ]
+    },
+    "git": {
+      "title": "Exposed source-code repository (.git)",
+      "plain": "The website is accidentally serving its behind-the-scenes source-code folder (.git). That's like a restaurant leaving its recipe binder - and its edit history - out on a public table. Anyone can download the site's source code and often its secrets.",
+      "why": "Source code frequently contains passwords, API keys, and logic that reveal exactly how to attack the site.",
+      "fix": [
+        "Stop the web server from serving the .git folder (block or remove it from the web root).",
+        "Rotate any passwords or keys that were in the code.",
+        "Re-check that /.git/config no longer downloads."
+      ]
+    },
+    "directory-listing": {
+      "title": "Directory listing enabled",
+      "plain": "Instead of showing a normal page, some folders on the site show a raw file listing - like walking into a room and seeing every box on open shelves. Visitors can browse files that were never meant to be found by clicking around.",
+      "why": "It exposes files the owner may not realise are reachable - backups, configs, uploads - which can leak data or aid an attack.",
+      "fix": [
+        "Turn off directory listing on the web server.",
+        "Move sensitive files out of the web root entirely."
+      ]
+    },
+    "sql": {
+      "title": "SQL injection",
+      "plain": "The website builds its database questions by pasting in whatever a visitor types. A clever attacker types database commands into a normal-looking box (like a search or login), and the site runs them - like slipping your own instructions into someone else's to-do list. This can dump or change the whole database.",
+      "why": "SQL injection is one of the most damaging web flaws - it can expose every user's data, bypass logins, and sometimes take over the server.",
+      "fix": [
+        "Use parameterised queries / prepared statements so user input is never treated as a command.",
+        "Validate and constrain all input.",
+        "Re-test the exact parameter that was vulnerable."
+      ]
+    },
+    "cheat-engine": {
+      "title": "Memory read/write & process injection capability",
+      "plain": "This program contains the tools to reach into another program's live memory and change it - the same technique cheats and trainers use to freeze health or give infinite ammo, and that malware uses to hide inside other apps.",
+      "why": "On its own it isn't proof of wrongdoing (debuggers and anti-cheats use these too), but combined with networking or anti-debugging it's a strong sign of a cheat, injector, or malware.",
+      "fix": [
+        "Only run programs like this from sources you trust.",
+        "If it's your own tool, that's expected; if not, treat it with suspicion and scan it with antivirus."
+      ]
+    },
+    "anti-debug": {
+      "title": "Anti-debugging / anti-analysis capability",
+      "plain": "The program tries to detect when it's being watched or taken apart, and can behave differently to hide what it really does. Games use this as anti-cheat; malware uses it to dodge analysis.",
+      "why": "It makes the program harder to inspect and is a common trait of both anti-cheat systems and malware.",
+      "fix": [
+        "Note it as context. For analysis you'd need dynamic tools that defeat anti-debugging - beyond this static check."
+      ]
+    },
+    "aws-access-key": {
+      "title": "Leaked cloud credential (AWS key)",
+      "plain": "A secret key that unlocks a cloud account was found sitting in a file. It's like leaving the keys to the building taped under the doormat - anyone who finds it can walk in.",
+      "why": "Leaked cloud keys are among the fastest ways an attacker takes over infrastructure, runs up huge bills, or steals data.",
+      "fix": [
+        "Revoke/rotate the exposed key immediately.",
+        "Remove it from the code and load secrets from environment variables or a secrets manager instead.",
+        "Check logs for any use of the key you didn't make."
+      ]
+    },
+    "secret": {
+      "title": "Leaked secret / credential",
+      "plain": "A password, API key, or token was found written directly in a file. Secrets in code are like a spare key left in the lock - anyone who reads the file gets in.",
+      "why": "Hard-coded secrets are one of the most common causes of breaches; they often end up in backups, shared repos, or logs.",
+      "fix": [
+        "Rotate (change) the exposed secret now.",
+        "Store secrets outside the code - environment variables or a secrets manager.",
+        "Add a secret-scanner to catch this before it's committed again."
+      ]
+    }
+  }
+}

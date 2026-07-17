@@ -1,0 +1,39 @@
+# ── Python ──
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+
+# ── Runtime state & personal data (NEVER commit) ──
+# data/ holds the SQLite DB, tool output, and caches: your IPs, scans, targets
+data/
+*.db
+*.db-journal
+*.sqlite
+*.sqlite3
+# your public IP -> location
+geoip_cache.json
+tle_cache.txt
+# imported camera feeds
+cameras.json
+reports/
+workspace/
+!workspace/.gitkeep
+
+# ── Secrets / configs that could carry personal info ──
+# generated WireGuard configs contain private keys
+*.conf
+*.pem
+*.key
+.env
+
+# ── OS / editor / misc ──
+.DS_Store
+Thumbs.db
+*.log
+node_modules/
+
+# ── Archives ──
+*.zip

@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>R.O.D.E v4</title>
+<link rel="stylesheet" href="/styles.css"/>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.29.2/cytoscape.min.js"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/cesium@1.103.0/Build/Cesium/Widgets/widgets.css"/>
+<script>window.CESIUM_BASE_URL='https://cdn.jsdelivr.net/npm/cesium@1.103.0/Build/Cesium/';</script>
+<script src="https://cdn.jsdelivr.net/npm/cesium@1.103.0/Build/Cesium/Cesium.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/satellite.js@5.0.0/dist/satellite.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/hls.js@1"></script>
+</head>
+<body>
+<div id="app">
+  <nav id="side">
+    <div class="brand">R.<b>O</b>.D.<b>E</b><small>v4</small></div>
+    <div class="side-inv">
+      <select id="invSel" title="Investigation" aria-label="Investigation"></select>
+      <div class="side-inv-btns">
+        <button id="newInv" class="ghost" aria-label="New investigation"><svg class="ic" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>New</button>
+        <button id="delInv" class="danger" aria-label="Delete investigation"><svg class="ic" viewBox="0 0 24 24"><path d="M4 7h16M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2m2 0-1 13a1 1 0 0 1-1 1H8a1 1 0 0 1-1-1L6 7"/></svg></button>
+      </div>
+    </div>
+    <div id="sidenav"></div>
+  </nav>
+  <div class="main">
+    <header>
+      <div class="htitle" id="pageTitle">Investigation</div>
+      <div class="spacer"></div>
+      <button id="arsenalBtn" class="sm ghost" title="Arsenal — tool catalogue" aria-label="Arsenal">
+        <svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="7"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>Arsenal</button>
+      <button class="pal-hint" id="palHint" title="Command palette">
+        <svg class="ic" viewBox="0 0 24 24" style="width:13px;height:13px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4-4"/></svg>Search <kbd>Ctrl K</kbd></button>
+      <span class="scope" id="scopeChip" role="button" tabindex="0" title="Click to edit scope"><span class="dot" style="background:var(--dim)"></span>no scope</span>
+      <div class="foot" id="footWrap" title="How detectable your activity has been">
+        <span>footprint</span>
+        <div class="fpbars" id="fpbars" role="img" aria-label="Detectability"><i></i><i></i><i></i><i></i><i></i></div>
+        <span id="fpLvl" style="font-weight:600">&mdash;</span></div>
+    </header>
+    <main id="page"></main>
+  </div>
+</div>
+
+<div id="toasts"></div>
+
+<div class="pal-bg" id="palBg"></div>
+<div class="palette" id="palette">
+  <input id="palInput" placeholder="Jump to a tab, or run a tool on the current target…" aria-label="Command palette"/>
+  <div class="res" id="palRes"></div>
+</div>
+
+<div class="overlay" id="invOverlay"><div class="modal">
+  <h3>New investigation</h3>
+  <label>Name</label><input id="invName" placeholder="e.g. Juice Shop"/>
+  <label>Type &mdash; shapes how the graph tells the story</label>
+  <select id="invMode">
+    <option value="infra">Infrastructure (URL / domain / IP)</option>
+    <option value="identity">Identity (username / email / person)</option>
+    <option value="traffic">Traffic (live capture)</option>
+    <option value="wireless">Wireless (WiFi / APs)</option>
+  </select>
+  <label>Scope &mdash; targets you're authorized to test (optional, comma separated)</label>
+  <input id="invScope" value="" placeholder="e.g. localhost, 127.0.0.1, example.com"/>
+  <div class="hint">Scope is advisory in v4 &mdash; nothing is blocked, you just get a one-time heads-up when a target is outside it.</div>
+  <div class="row"><button id="invCancel" class="ghost">Cancel</button><button class="primary" id="invCreate">Create</button></div>
+</div></div>
+
+<div class="overlay" id="confirmOverlay"><div class="modal">
+  <h3 style="color:var(--loud)">Loud tool</h3>
+  <div id="confirmMsg" class="modaltext"></div>
+  <div class="hint">This tool is noisy and shows up clearly in logs. Only run it against systems you own or are authorized to test.</div>
+  <div class="row"><button id="confirmCancel" class="ghost">Cancel</button><button class="primary" id="confirmGo" style="background:var(--loud);border-color:var(--loud)">I own this &mdash; run</button></div>
+</div></div>
+
+<div class="overlay" id="askOverlay"><div class="modal">
+  <h3 id="askTitle">Are you sure?</h3>
+  <div id="askMsg" class="modaltext"></div>
+  <div class="row"><button id="askCancel" class="ghost">Cancel</button><button class="primary" id="askOk">Confirm</button></div>
+</div></div>
+
+<div class="overlay" id="arsenalOverlay"><div class="modal arsenal">
+  <h3>Arsenal</h3>
+  <div class="legend" id="legend"></div>
+  <div id="arsenalBody"></div>
+  <div class="row"><button id="arsenalClose" class="ghost">Close</button></div>
+</div></div>
+
+<script type="module" src="/js/app.js"></script>
+</body>
+</html>

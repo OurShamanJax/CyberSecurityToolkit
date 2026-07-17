@@ -1,0 +1,297 @@
+# ============================================================================
+#  R.O.D.E v3 - Tool Catalog (data, not code)
+#
+#  Edit THIS file to add a tool. No Python needed. Copy a block, change fields.
+#  Required: id, name, category, input_type, noise, exec (>=1 mode)
+#  Optional: parser (defaults "generic"), teach (beginner guidance)
+#
+#  Placeholders in exec commands:  {target}  {wordlist}
+#  noise:    silent | whisper | moderate | loud | aggressive   (detectability)
+#  category: recon | exploit | defensive
+# ============================================================================
+
+# ─────────────────────────────  OSINT (silent)  ────────────────────────────
+- id: sherlock
+  name: Sherlock
+  category: recon
+  input_type: username
+  noise: silent
+  parser: sherlock
+  exec:
+    docker: { image: "sherlock/sherlock", args: ["{target}", "--print-found", "--timeout", "10"] }
+  teach:
+    what: "Hunts a username across 300+ social sites in seconds."
+    why:  "Fastest first move when you only have a username - maps their whole footprint."
+    next: "Feed found profiles into Maigret for deeper detail."
+
+- id: maigret
+  name: Maigret
+  category: recon
+  input_type: username
+  noise: silent
+  parser: sherlock
+  exec:
+    docker: { image: "soxoj/maigret", args: ["{target}", "--timeout", "10"] }
+  teach:
+    what: "Like Sherlock but checks 2000+ sites and pulls bio/location data."
+    why:  "Depth over speed - builds a rich profile after Sherlock confirms accounts."
+    next: "Cross-reference emails/handles it finds in theHarvester."
+
+- id: theharvester
+  name: theHarvester
+  category: recon
+  input_type: domain
+  noise: silent
+  parser: theharvester
+  exec:
+    docker: { image: "laramies/theharvester", args: ["-d", "{target}", "-b", "all", "-l", "200"] }
+  teach:
+    what: "Harvests emails, subdomains and IPs for a domain from public sources."
+    why:  "Completely passive - everything it finds is already public."
+    next: "Resolve the subdomains it finds with dnsx, then probe with HTTPx."
+
+- id: subfinder
+  name: Subfinder
+  category: recon
+  input_type: domain
+  noise: silent
+  parser: subfinder
+  exec:
+    docker: { image: "projectdiscovery/subfinder:latest", args: ["-silent", "-d", "{target}"] }
+  teach:
+    what: "Fast passive subdomain discovery from 40+ data sources."
+    why:  "Hidden subdomains often run older, weaker software."
+    next: "Pipe into HTTPx to see which are live."
+
+- id: amass
+  name: Amass
+  category: recon
+  input_type: domain
+  noise: silent
+  parser: subfinder
+  exec:
+    docker: { image: "caffix/amass:latest", args: ["enum", "-passive", "-d", "{target}"] }
+  teach:
+    what: "The most thorough subdomain mapper - slower but finds more than Subfinder."
+    why:  "When you want the most complete attack surface possible."
+    next: "Resolve everything with dnsx."
+
+# ─────────────────────────────  Recon (whisper)  ───────────────────────────
+- id: dnsx
+  name: DNSx
+  category: recon
+  input_type: domain
+  noise: whisper
+  parser: generic
+  exec:
+    docker: { image: "projectdiscovery/dnsx:latest", args: ["-silent", "-a", "-cname", "-resp", "-d", "{target}"] }
+  teach:
+    what: "Resolves DNS records (A, CNAME, MX) to reveal the infrastructure."
+    why:  "DNS shows hosting, mail, and CDN behind a domain."
+    next: "Take the IPs into Nmap."
+
+- id: httpx
+  name: HTTPx
+  category: recon
+  input_type: domain
+  noise: whisper
+  parser: httpx
+  exec:
+    docker: { image: "projectdiscovery/httpx:latest", args: ["-silent", "-title", "-status-code", "-tech-detect", "-u", "{target}"] }
+  teach:
+    what: "Probes which web addresses are alive and what tech they run."
+    why:  "Separates live targets from dead ones before heavier tools."
+    next: "Fingerprint the live ones with WhatWeb, then scan with Nuclei."
+
+- id: whatweb
+  name: WhatWeb
+  category: recon
+  input_type: url
+  noise: whisper
+  parser: generic
+  exec:
+    docker: { image: "rode-whatweb", args: ["{target}", "--color=never"] }
+  teach:
+    what: "Fingerprints a site - CMS, framework, server, often exact versions."
+    why:  "Knowing 'WordPress 5.6' points you straight at known exploits."
+    next: "Look the version up with CVE Lookup."
+
+- id: wafw00f
+  name: wafw00f
+  category: recon
+  input_type: url
+  noise: whisper
+  parser: generic
+  exec:
+    docker: { image: "rode-wafw00f", args: ["{target}", "-a"] }
+  teach:
+    what: "Detects whether a Web Application Firewall protects the target."
+    why:  "A WAF changes everything - aggressive scans get you blocked instantly."
+    warn: "Run this BEFORE loud tools like Nikto or Gobuster."
+
+# ─────────────────────────────  Scan (moderate)  ───────────────────────────
+- id: nmap
+  name: Nmap
+  category: recon
+  input_type: ip
+  noise: moderate
+  parser: nmap
+  exec:
+    local:  { cmd: ["nmap", "-sV", "--open", "-T4", "{target}"] }
+    docker: { image: "instrumentisto/nmap:latest", args: ["-sV", "--open", "-T4", "{target}"] }
+  teach:
+    what: "Knocks on every port and asks what software is listening."
+    why:  "You can't attack a door you can't see. Step 1 for any host."
+    flags:
+      "-sV": "Detect the service and version behind each open port."
+      "--open": "Only show ports that are actually open."
+      "-T4": "Go fairly fast (fine for a lab)."
+    next: "Look up the versions with CVE Lookup."
+
+- id: nuclei
+  name: Nuclei
+  category: exploit
+  input_type: url
+  noise: moderate
+  parser: nuclei
+  exec:
+    docker: { image: "projectdiscovery/nuclei:latest", args: ["-silent", "-severity", "low,medium,high,critical", "-u", "{target}"] }
+  teach:
+    what: "Tests for thousands of specific known vulnerabilities via templates."
+    why:  "The best free vuln scanner - very few false alarms."
+    next: "Confirm findings by hand and add them to your report."
+
+# ─────────────────────────────  Exploit (loud)  ────────────────────────────
+- id: gobuster
+  name: Gobuster
+  category: exploit
+  input_type: url
+  noise: loud
+  parser: gobuster
+  exec:
+    docker: { image: "ghcr.io/oj/gobuster:latest", args: ["dir", "-u", "{target}", "-w", "{wordlist}"] }
+  teach:
+    what: "Brute-forces hidden directories and files on a web server."
+    why:  "Admin panels and backups often aren't linked but are still reachable."
+    warn: "LOUD - floods the server with requests. Needs a wordlist in the wordlists/ folder."
+
+- id: nikto
+  name: Nikto
+  category: exploit
+  input_type: url
+  noise: loud
+  parser: nikto
+  exec:
+    docker: { image: "ghcr.io/sullo/nikto:latest", args: ["-h", "{target}"] }
+  teach:
+    what: "Throws 6700+ checks at a web server for risky files and misconfigs."
+    why:  "Great for low-hanging fruit like exposed admin panels."
+    warn: "LOUD - shows up clearly in logs. Only on targets you own."
+
+# ──────────────────────────  Exploit (aggressive)  ─────────────────────────
+- id: sqlmap
+  name: SQLMap
+  category: exploit
+  input_type: url
+  noise: aggressive
+  parser: sqlmap
+  exec:
+    docker: { image: "secsi/sqlmap", args: ["-u", "{target}", "--batch", "--level=1", "--risk=1"] }
+  teach:
+    what: "Automatically finds and exploits SQL injection, then dumps the database."
+    why:  "SQL injection is still the #1 web vuln; SQLMap automates hours of work."
+    warn: "AGGRESSIVE - actively attacks the target. NEVER run on systems you don't own."
+
+# ─────────────────────────  Defensive (built-in)  ──────────────────────────
+- id: cve_lookup
+  name: CVE Lookup
+  category: defensive
+  input_type: software
+  noise: silent
+  parser: generic
+  exec:
+    python: { handler: "cve_lookup" }
+  teach:
+    what: "Looks up known CVEs for a software name + version (via the NVD database)."
+    why:  "When Nmap says 'Apache 2.4.41', this tells you what's wrong with it."
+    next: "Prioritise the highest CVSS scores."
+
+- id: log_analyzer
+  name: Log Analyzer
+  category: defensive
+  input_type: file
+  noise: silent
+  parser: generic
+  exec:
+    python: { handler: "log_analyzer" }
+  teach:
+    what: "Reads a log file and flags attack patterns and noisy IPs."
+    why:  "Logs are your only visibility when defending."
+    warn: "Only reads files inside the workspace/ folder (safety sandbox)."
+
+- id: hash_identifier
+  name: Hash Identifier
+  category: defensive
+  input_type: hash
+  noise: silent
+  parser: generic
+  exec:
+    python: { handler: "hash_identifier" }
+  teach:
+    what: "Guesses a hash's algorithm and tries common passwords against it."
+    why:  "Old MD5/SHA1 hashes of weak passwords crack instantly."
+    next: "For real cracking use hashcat or john with a full wordlist."
+
+- id: reachability
+  name: Connectivity Test
+  category: defensive
+  input_type: url
+  noise: silent
+  parser: generic
+  exec:
+    docker: { image: "curlimages/curl:latest", args: ["-sS", "--max-time", "10", "-o", "/dev/null", "-w", "container -> {target}: HTTP %{http_code} in %{time_total}s\n", "{target}"] }
+  teach:
+    what: "Runs curl from INSIDE a container to see if it can actually reach your target."
+    why:  "If web tools find nothing, this proves whether the container can even connect."
+    next: "HTTP 200/3xx = reachable (tools should work). 000 / could-not-connect = the container can't reach your host service."
+
+# ─────────────────────────  Analysis (files & binaries)  ───────────────────
+- id: binary_inspector
+  name: Binary Inspector
+  category: analysis
+  input_type: path
+  noise: silent
+  parser: binary
+  exec:
+    python: { handler: "binary_inspector" }
+  teach:
+    what: "Statically inspects a program file (.exe / .dll / ELF) to reveal what it can do."
+    why:  "See whether a binary can read/write memory, inject into other processes, key-log, or phone home - all without running it."
+    next: "Feed any URLs or IPs it references into the web-recon tools."
+
+- id: trivy
+  name: Trivy (directory scan)
+  category: analysis
+  input_type: path
+  noise: silent
+  parser: trivy
+  exec:
+    docker: { image: "aquasec/trivy:latest", args: ["fs", "--scanners", "vuln,secret,misconfig", "--format", "json", "--quiet", "{target}"] }
+  teach:
+    what: "Scans a folder for vulnerable dependencies, leaked secrets (API keys/passwords), and misconfigurations."
+    why:  "Catches known-bad library versions and accidentally-committed credentials before an attacker does."
+    warn: "First run downloads Trivy's vulnerability database, so it can take a minute."
+
+- id: exploit_search
+  name: Exploit-DB Search
+  category: exploit
+  input_type: software
+  noise: silent
+  parser: exploit
+  exec:
+    python: { handler: "exploit_search" }
+  teach:
+    what: "Searches the public Exploit-DB index for known exploits matching a product, version, or CVE."
+    why:  "When recon finds 'Apache 2.4.49' or a CVE, this shows which public exploits already exist for it."
+    next: "Open the exploit page to study it. Only test systems you own or are authorized to test."
+    warn: "For authorized testing only. These are references to public exploits, not attacks by themselves."

@@ -1,0 +1,154 @@
+"""
+Growing investigation report - rendered as a self-contained HTML document.
+
+Pulls the current state of an investigation (findings, capabilities, assets,
+tool runs) and produces a printable HTML page, with a plain-English explanation
+for every finding drawn from the knowledge base. Re-generating always reflects
+the latest state, so the report "grows" as you work.
+"""
+from __future__ import annotations
+
+import html
+import json
+from datetime import datetime
+
+from sqlalchemy.orm import Session
+
+from ..models import Investigation, Run, Entity, Finding
+from .knowledge import lookup
+
+SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, "unknown": 5}
+SEV_COLOR = {"critical": "#b00020", "high": "#d9480f", "medium": "#b8860b",
+             "low": "#1971c2", "info": "#5c7080", "unknown": "#5c7080"}
+ASSET_LABELS = {"ip": "Hosts / IPs", "domain": "Domains & subdomains", "url": "URLs",
+                "service": "Services / ports", "email": "Emails", "username": "Usernames",
+                "technology": "Technologies", "file": "Files analysed",
+                "capability": "Capabilities", "secret": "Secrets", "target": "Targets",
+                "credential": "Credentials", "access_point": "Access points", "alert": "Traffic alerts", "exploit": "Known exploits"}
+
+
+def _e(x) -> str:
+    return html.escape(str(x or ""))
+
+
+def _finding_key(f: Finding) -> str:
+    try:
+        m = json.loads(f.detail or "{}")
+    except Exception:
+        m = {}
+    return " ".join(x for x in (m.get("template"), m.get("rule"), m.get("pkg"), f.title) if x)
+
+
+def build_html(db: Session, inv_id: int) -> tuple[str, str]:
+    inv = db.query(Investigation).filter(Investigation.id == inv_id).first()
+    if not inv:
+        return "<h1>Investigation not found</h1>", "report.html"
+
+    ents = db.query(Entity).filter(Entity.investigation_id == inv_id).all()
+    runs = db.query(Run).filter(Run.investigation_id == inv_id) \
+             .order_by(Run.created_at.desc()).all()
+
+    # De-dupe findings by title, keep the most severe.
+    fmap: dict[str, Finding] = {}
+    for f in db.query(Finding).filter(Finding.investigation_id == inv_id).all():
+        cur = fmap.get(f.title)
+        if not cur or SEV_ORDER.get(f.severity, 5) < SEV_ORDER.get(cur.severity, 5):
+            fmap[f.title] = f
+    findings = sorted(fmap.values(), key=lambda x: SEV_ORDER.get(x.severity, 5))
+
+    counts = {s: 0 for s in ("critical", "high", "medium", "low", "info")}
+    for f in findings:
+        counts[f.severity] = counts.get(f.severity, 0) + 1
+
+    caps = [e for e in ents if e.type == "capability"]
+    assets: dict[str, list] = {}
+    for e in ents:
+        assets.setdefault(e.type, []).append(e)
+
+    now = datetime.utcnow().strftime("%B %d, %Y")
+    P = []
+    P.append(f"""<!DOCTYPE html><html><head><meta charset="utf-8"><title>{_e(inv.name)} - Report</title>
+<style>
+  body{{font-family:'Segoe UI',Arial,sans-serif;color:#1a1a1a;max-width:820px;margin:0 auto;padding:34px 40px;line-height:1.55;font-size:15px}}
+  h1{{font-size:26px;margin:0 0 2px;color:#12263a}} h2{{font-size:19px;color:#2E75B6;border-bottom:2px solid #dbe5ef;padding-bottom:5px;margin-top:30px}}
+  h3{{font-size:16px;margin:20px 0 4px}}
+  .meta{{color:#5c7080;font-size:13px;margin-bottom:18px}}
+  table{{border-collapse:collapse;width:100%;margin:10px 0;font-size:14px}}
+  th,td{{border:1px solid #d5dde5;padding:7px 10px;text-align:left;vertical-align:top}}
+  th{{background:#12263a;color:#fff;font-weight:600}}
+  .pill{{display:inline-block;padding:2px 9px;border-radius:20px;font-size:12px;font-weight:600;color:#fff;text-transform:uppercase}}
+  .sumgrid{{display:flex;gap:10px;flex-wrap:wrap;margin:12px 0}}
+  .sc{{background:#f3f6f9;border-radius:8px;padding:10px 16px;min-width:92px;text-align:center}}
+  .sc b{{font-size:22px;display:block}} .sc span{{font-size:12px;color:#5c7080}}
+  .plain{{background:#eef6f3;border-left:5px solid #2E7D6F;padding:11px 15px;border-radius:0 6px 6px 0;margin:8px 0}}
+  .plain .t{{font-weight:700;color:#2E7D6F;margin-bottom:4px}}
+  .why{{font-size:14px}} .fix li{{margin:3px 0}}
+  .muted{{color:#5c7080;font-size:13px}} code{{background:#f0f2f4;padding:1px 5px;border-radius:4px;font-size:13px}}
+  @media print{{body{{padding:0}}}}
+</style></head><body>""")
+    P.append(f"<h1>{_e(inv.name)}</h1>")
+    P.append(f'<div class="meta">R.O.D.E v4 investigation report &middot; {now} &middot; scope: {_e(", ".join(inv.scope()) or "local only")}</div>')
+
+    # Summary
+    P.append("<h2>Summary</h2>")
+    P.append('<div class="sumgrid">')
+    for s in ("critical", "high", "medium", "low", "info"):
+        P.append(f'<div class="sc"><b style="color:{SEV_COLOR[s]}">{counts.get(s,0)}</b><span>{s}</span></div>')
+    P.append(f'<div class="sc"><b>{len(ents)}</b><span>entities</span></div>')
+    P.append(f'<div class="sc"><b>{len(runs)}</b><span>tool runs</span></div>')
+    P.append('</div>')
+    if not findings and not caps:
+        P.append('<p class="muted">No findings or capabilities recorded yet. Run some tools, then regenerate this report.</p>')
+
+    # Findings
+    if findings:
+        P.append("<h2>Findings</h2>")
+        for i, f in enumerate(findings, 1):
+            kb = lookup(_finding_key(f), f.severity)
+            col = SEV_COLOR.get(f.severity, "#5c7080")
+            P.append(f'<h3>{i}. {_e(f.title)} '
+                     f'<span class="pill" style="background:{col}">{_e(f.severity)}</span></h3>')
+            P.append('<div class="plain"><div class="t">In plain English</div>'
+                     f'<div>{_e(kb.get("plain",""))}</div>')
+            if kb.get("why"):
+                P.append(f'<div class="why" style="margin-top:6px"><b>Why it matters:</b> {_e(kb["why"])}</div>')
+            P.append('</div>')
+            if kb.get("fix"):
+                P.append('<b>How to fix it</b><ul class="fix">')
+                for step in kb["fix"]:
+                    P.append(f'<li>{_e(step)}</li>')
+                P.append('</ul>')
+
+    # Capabilities (from Binary Inspector)
+    if caps:
+        P.append("<h2>Program capabilities</h2>")
+        P.append('<p class="muted">Static capabilities detected in analysed binaries (hints, not proof of behaviour).</p><table>'
+                 '<tr><th>Capability</th><th>APIs / evidence</th></tr>')
+        for c in caps:
+            meta = c.metadata_dict()
+            P.append(f'<tr><td>{_e(c.label or c.value)}</td><td><code>{_e(meta.get("apis",""))}</code></td></tr>')
+        P.append('</table>')
+
+    # Assets
+    other = {k: v for k, v in assets.items() if k not in ("capability", "vulnerability", "secret", "category", "credential", "alert")}
+    if other:
+        P.append("<h2>Assets discovered</h2><table><tr><th>Type</th><th>Count</th><th>Examples</th></tr>")
+        for t, items in sorted(other.items(), key=lambda kv: -len(kv[1])):
+            ex = ", ".join(_e(x.value)[:40] for x in items[:4])
+            P.append(f'<tr><td>{_e(ASSET_LABELS.get(t,t))}</td><td>{len(items)}</td><td class="muted">{ex}</td></tr>')
+        P.append("</table>")
+
+    # Tools run
+    if runs:
+        P.append("<h2>Tools run</h2><table><tr><th>Tool</th><th>Target</th><th>When</th></tr>")
+        for r in runs[:40]:
+            P.append(f'<tr><td>{_e(r.tool_id)}</td><td class="muted">{_e(r.target)}</td>'
+                     f'<td class="muted">{r.created_at.strftime("%Y-%m-%d %H:%M")}</td></tr>')
+        P.append("</table>")
+
+    P.append('<p class="muted" style="margin-top:26px">Generated by R.O.D.E v4. Plain-English explanations come from '
+             'R.O.D.E&#39;s findings knowledge base. Validate findings before formal use.</p>')
+    P.append("</body></html>")
+
+    safe = "".join(c if c.isalnum() else "_" for c in inv.name)[:40] or "investigation"
+    return "".join(P), f"RODE_report_{safe}.html"
