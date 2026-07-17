@@ -317,25 +317,47 @@ body.compact .page-body{padding:14px}
 .exploitpage.adv .lvl-advanced{display:block}
 .exploitpage.adv .lvl-beginner{display:none}
 
-/* ── Metasploit workbench ── */
-.msf-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px;margin-bottom:14px}
-@media(max-width:820px){.msf-grid{grid-template-columns:1fr}}
-.msfpage .fld{display:block;font-size:12px;color:var(--dim);margin:8px 0}
-.msfpage .fld input,.msfpage .fld select{display:block;width:100%;margin-top:4px;background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 9px;color:var(--fg);font-size:13px;font-family:inherit}
-.msfpage .two{display:grid;grid-template-columns:1fr 1fr;gap:10px}
-.pl-info{margin-top:10px;display:flex;flex-wrap:wrap;gap:6px;align-items:center}
-.chip{font-size:11px;background:var(--bg);border:1px solid var(--line);border-radius:20px;padding:2px 9px;color:var(--dim);display:inline-flex;align-items:center;gap:5px}
-.chip .dot{width:7px;height:7px;border-radius:50%;display:inline-block}
-.recipe{background:#0c0f13;border:1px solid var(--line);border-left:3px solid var(--accent);border-radius:8px;padding:11px 13px;font-family:var(--mono);font-size:12.5px;color:#c8e6ef;white-space:pre-wrap;word-break:break-all;margin:0 0 8px}
-.wl{font-size:12px;padding:5px 9px;border-radius:6px;margin:5px 0}
-.wl.err{background:rgba(224,104,106,.12);color:#eaa0a1}
-.wl.warn{background:rgba(217,164,65,.12);color:#e3c078}
-.wl.ok{background:rgba(95,191,138,.12);color:#8fd9b3}
-.wl code{font-family:var(--mono);font-size:11.5px}
-.ackrow{display:flex;gap:9px;align-items:flex-start;font-size:12.5px;color:var(--fg);margin-top:10px;cursor:pointer;line-height:1.45}
-.ackrow input{margin-top:2px;flex:0 0 auto}
-.defnote{background:rgba(224,104,106,.09);border:1px solid rgba(224,104,106,.3);color:#eaa0a1;border-radius:8px;padding:9px 12px;font-size:12px;margin-top:12px;line-height:1.5}
-.msf-out,.msf-term{background:#0a0d10;border:1px solid var(--line);border-radius:8px;padding:11px 13px;font-family:var(--mono);font-size:12px;color:#bcd;white-space:pre-wrap;word-break:break-word;max-height:340px;overflow:auto;margin:0}
-.msf-term{min-height:240px;color:#9fe0b8}
-.prompt{font-family:var(--mono);color:var(--accent);font-size:13px;flex:0 0 auto}
-#conIn{background:var(--bg);border:1px solid var(--line);border-radius:7px;padding:7px 9px;color:var(--fg);font-family:var(--mono);font-size:12.5px}
+
+/* ── Unified Exploit workspace ── */
+.seg{display:flex;gap:4px;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:4px;margin:14px 0}
+.seg-i{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:7px;background:transparent;border:0;color:var(--dim);font-family:inherit;font-size:var(--t-sm);padding:8px 10px;border-radius:7px;cursor:pointer}
+.seg-i .ic{width:15px;height:15px}
+.seg-i:hover{color:var(--text);background:var(--surface2)}
+.seg-i.on{background:var(--raise);color:var(--text);box-shadow:inset 0 0 0 1px var(--line2)}
+.ctx-chip{font-size:var(--t-xs);color:var(--accent);background:rgba(75,184,208,.12);border:1px solid rgba(75,184,208,.32);padding:3px 10px;border-radius:20px;display:inline-flex;align-items:center;gap:5px}
+.ctx-chip .muted{color:var(--dim)}
+/* host existing modules seamlessly: drop their own title + intro, keep sub-toggles */
+.exwrap #exBody .page{display:block;overflow:visible;min-height:auto;flex:none}
+.exwrap #exBody .page-h{padding:0 0 4px;border-bottom:0;margin-bottom:10px}
+.exwrap #exBody .page-h h2{display:none}
+.exwrap #exBody .page-h>p{display:none}
+.exwrap #exBody .page-body{padding:0}
+/* Find-exploits result cards */
+.ex-list{display:flex;flex-direction:column;gap:8px;margin-top:12px}
+.ex-card{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--line);border-left:3px solid var(--exploit);border-radius:0 8px 8px 0;padding:10px 13px}
+.ex-main{flex:1;min-width:0}
+.ex-main b{font-size:var(--t-sm)}
+.ex-meta{display:flex;gap:6px;align-items:center;margin-top:5px;flex-wrap:wrap}
+.chip.cve{color:var(--vuln);border-color:rgba(224,128,143,.4)}
+
+
+/* ── Atlas v2 panel ── */
+#atlasPanel{position:absolute;top:12px;left:12px;z-index:5;width:238px;max-height:calc(100% - 24px);overflow:auto;
+  background:rgba(13,17,23,.82);border:1px solid var(--line);border-radius:11px;padding:11px;display:flex;flex-direction:column;gap:13px}
+#atlasPanel .ap-search{display:flex;gap:6px}
+#atlasPanel .ap-search input{flex:1;font-size:12px;padding:6px 9px;min-width:0}
+.ap-sec{display:flex;flex-direction:column;gap:6px}
+.ap-lbl{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--dim)}
+.ap-toggle{cursor:pointer;user-select:none}
+.ap-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);cursor:pointer}
+.ap-row input{width:auto;flex:0 0 auto}
+.ap-row span:first-of-type{flex:1}
+.ap-c{color:var(--accent);font-size:11px;font-weight:600}
+.ap-info{font-size:12px;line-height:1.5;max-height:240px;overflow:auto}
+.ap-info button{margin-top:4px}
+.ap-meta{font-size:11px;color:var(--dim);border-top:1px solid var(--line);padding-top:7px;min-height:8px}
+.tr-list{display:flex;flex-direction:column;gap:1px;margin-top:5px;max-height:180px;overflow:auto}
+.tr-hop{display:flex;align-items:baseline;gap:6px;font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.tr-n{color:var(--dim);flex:0 0 24px}
+.tr-ip{flex:0 0 auto;color:var(--text)}
+.tr-loc{flex:1;color:var(--mut);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

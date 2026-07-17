@@ -7,6 +7,7 @@
 import { $, toast, escapeHtml } from '../core.js';
 
 let ws=null, cat=null, statusInfo=null, tab='build', consoleOn=false, previewTimer=null;
+let bootT=null, bootStart=0, gotOut=false;
 
 function shell(){ return `
 <div class="page msfpage"><div class="page-h"><div class="row1">
@@ -158,13 +159,18 @@ function setConsole(on){ consoleOn=on;
   if(on)$('#conIn').focus();
 }
 
+const BOOT_MSG='Booting the Metasploit framework — first run can take 30-90s, and without a TTY output may arrive in bursts.';
 function startConsole(){
-  $('#term').textContent='Starting msfconsole…\n';
+  gotOut=false; bootStart=Date.now();
+  $('#term').textContent=BOOT_MSG+'\n';
+  clearInterval(bootT);
+  bootT=setInterval(()=>{ if(!gotOut){ const sec=Math.round((Date.now()-bootStart)/1000);
+    $('#term').textContent=BOOT_MSG+'\n\n  booting… '+sec+'s'; } }, 1000);
   const w=connect(m=>{
-    if(m.type==='output') appendTerm(m.data);
+    if(m.type==='output'){ if(!gotOut){ gotOut=true; clearInterval(bootT); $('#term').textContent=''; } appendTerm(m.data); }
     else if(m.type==='console_started'){ setConsole(true); }
-    else if(m.type==='console_stopped'){ setConsole(false); appendTerm('\n[stopped]\n'); }
-    else if(m.type==='error'){ appendTerm('\n[error] '+(m.message||'')+'\n'); setConsole(false); }
+    else if(m.type==='console_stopped'){ clearInterval(bootT); setConsole(false); appendTerm('\n[stopped]\n'); }
+    else if(m.type==='error'){ clearInterval(bootT); appendTerm('\n[error] '+(m.message||'')+'\n'); setConsole(false); }
   });
   const go=()=>w.send(JSON.stringify({action:'console_start'}));
   if(w.readyState===1) go(); else w.onopen=go;
@@ -214,5 +220,5 @@ function renderStatus(s){
   }
 }
 
-function unmount(){ try{ if(ws){ ws.close(); ws=null; } }catch(e){} consoleOn=false; }
+function unmount(){ clearInterval(bootT); try{ if(ws){ ws.close(); ws=null; } }catch(e){} consoleOn=false; }
 export default { id:'payloads', label:'Payloads', short:'Payloads', mount, unmount };

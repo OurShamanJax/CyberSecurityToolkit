@@ -319,10 +319,44 @@ class CamImportIn(BaseModel):
     source: str = "tfl"
 
 
+class WindyIn(BaseModel):
+    lat: float
+    lng: float
+    radius: int = 100
+    key: str = ""
+
+
+class SecretIn(BaseModel):
+    key: str
+
+
 @app.post("/api/cams/import")
 def api_cams_import(body: CamImportIn):
     from ..cams import import_source
     return import_source(body.source)
+
+
+@app.post("/api/cams/windy")
+def api_cams_windy(body: WindyIn):
+    """Load Windy webcams near a viewport centre (global coverage; free key)."""
+    from ..cams import import_windy
+    return import_windy(body.lat, body.lng, body.radius, body.key)
+
+
+@app.get("/api/secrets")
+def api_secrets():
+    """Which secrets are configured (booleans only - never returns the values)."""
+    from ..cams import get_secret
+    return {"windy": bool(get_secret("windy_key"))}
+
+
+@app.post("/api/secrets/windy")
+def api_set_windy(body: SecretIn):
+    """Persist the Windy key in data/secrets.json (gitignored, never committed)."""
+    from ..cams import set_secret
+    k = body.key.strip()
+    set_secret("windy_key", k)
+    return {"ok": True, "windy": bool(k)}
 
 
 @app.delete("/api/cams/{cid}")
@@ -352,6 +386,41 @@ def api_wifi_connected():
 def api_myip():
     from ..exposure import my_ip
     return {"ip": my_ip()}
+
+
+@app.get("/api/lanip")
+def api_lanip():
+    """The machine's primary LAN IP - used to pre-fill the payload listener (LHOST)
+    so a reverse callback points at this box on the local network. No packets sent."""
+    import socket
+    ip = "127.0.0.1"
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        try:
+            s.connect(("8.8.8.8", 80))
+            ip = s.getsockname()[0]
+        finally:
+            s.close()
+    except Exception:
+        pass
+    return {"ip": ip}
+
+
+@app.get("/api/locate")
+def api_locate(q: str):
+    """Geolocate one IP/domain for the Atlas locate tool."""
+    from .. import nettrace
+    r = nettrace.locate_rich(q)
+    if not r:
+        raise HTTPException(404, "could not resolve target")
+    return r
+
+
+@app.get("/api/traceroute")
+def api_traceroute(target: str):
+    """Run the OS traceroute to target and geolocate each public hop."""
+    from .. import nettrace
+    return nettrace.traceroute(target)
 
 
 @app.get("/api/exposure")

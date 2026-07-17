@@ -10,6 +10,7 @@ import vpn from './pages/vpn.js';
 import atlas from './pages/atlas.js';
 import exploits from './pages/exploits.js';
 import payloads from './pages/payloads.js';
+import exploit from './pages/exploit.js';
 import report from './pages/report.js';
 import settings, { applySettings } from './pages/settings.js';
 
@@ -24,10 +25,11 @@ const IC = {
   atlas:'<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/>',
   exploits:'<path d="M13 2 3 14h7l-1 8 10-12h-7z"/>',
   payloads:'<path d="M12 2 4 6v6c0 5 3.4 8.3 8 10 4.6-1.7 8-5 8-10V6z"/><path d="M12 8v5M9.5 10.5h5"/>',
+  exploit:'<path d="M13 2 3 14h7l-1 8 10-12h-7z"/>',
   report:'<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/>',
   settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
 };
-const PAGES = [investigation, traffic, analyzer, credentials, wireless, exposure, vpn, atlas, exploits, payloads, report, settings];
+const PAGES = [investigation, traffic, credentials, wireless, exposure, vpn, atlas, exploit, report, settings];
 const byId = Object.fromEntries(PAGES.map(p=>[p.id,p]));
 let current = null;
 const $$ = s => [...document.querySelectorAll(s)];
@@ -37,7 +39,7 @@ const GROUPS=[
   {label:'Recon',     ids:['exposure','wireless','atlas']},
   {label:'Offense',   ids:['credentials']},
   {label:'Defense',   ids:['traffic','vpn']},
-  {label:'Exploit',   ids:['analyzer','exploits','payloads']},
+  {label:'Exploit',   ids:['exploit']},
   {label:'System',    ids:['report','settings']},
 ];
 function buildSidebar(){

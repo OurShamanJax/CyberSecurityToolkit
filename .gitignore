@@ -40,3 +40,7 @@ node_modules/
 
 # stray sandbox temp (delete on Windows: del tests\_pp_test.py)
 tests/_pp_test.py
+
+# API keys / secrets (also covered by data/)
+secrets.json
+data/secrets.json
