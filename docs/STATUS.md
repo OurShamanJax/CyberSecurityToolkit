@@ -38,6 +38,14 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - **VPN** — real **WireGuard** config generator (X25519 keys) + guided deploy.
 - **Analyzer** — running-app / directory / file analysis (binary inspector + Trivy),
   expand-to-detail view.
+- **Exploits** — two-level (beginner/advanced) education on exploitation, Metasploit,
+  payloads, and severity/loudness reasoning.
+- **Payloads (Metasploit workbench)** — thin wrapper over the real upstream tools:
+  a **Payload Builder** that composes + runs an **msfvenom** command (Docker or local),
+  showing the exact recipe, and a live **msfconsole** session over a WebSocket. Every
+  build is validated server-side (payload/format/encoder allowlists, port + iteration
+  ranges, public-LHOST warning), argv-only (no shell), authorized-lab-gated. No
+  hand-authored exploit/malware — msfvenom does the work.
 - **Settings** — animations, density, accent, tool/capability check.
 
 ### Ops
@@ -58,8 +66,8 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - [ ] **searchsploit / Exploit-DB** integration — map a detected product+version to known
       public exploits, right on the vuln node. (The "exploitation database" ask, done the
       FOSS way.) `[WRAP]`
-- [ ] **Metasploit (msfconsole)** as a Dockerized tool + in-app terminal, for authorized
-      lab use. `[WRAP]` — see the note below on payloads.
+- [x] **Metasploit (msfconsole)** Dockerized + in-app terminal, and **msfvenom Payload
+      Builder**, for authorized lab use. `[WRAP]` — done (Payloads page).
 - [ ] **Two-level explanations** everywhere (beginner + advanced), including the Report.
 - [ ] **Report upgrade** — narrative + severity/loudness + fix steps at both levels.
 
@@ -92,9 +100,11 @@ them for **your own authorized lab** (e.g. your Pop!_OS box) fits this toolkit �
 way sqlmap/hydra/nikto already do. So an **msfconsole terminal + searchsploit** are on the
 roadmap.
 
-The one thing I won't hand-author is **novel exploit or malware code**. A *payload
-generator* is a grey area: msfvenom is a standard tool, but its output is functional
-malware (that's why Windows Defender flags it), so if we add it, it'll be a thin interface
-to the real msfvenom (in Docker) with strong "authorized-lab-only" framing and clear
-education — I won't be writing custom payloads/exploits from scratch. We'll build the
-*framework and the teaching*, and lean on the established tools for the actual offense.
+**Built (Payloads page):** a thin interface to the real **msfvenom** (Docker or local)
+with strong "authorized-lab-only" framing, live command preview, server-side validation
+(allowlists + range checks + public-LHOST warning), and clear education. Plus a live
+**msfconsole**. The one thing R.O.D.E still won't do is **hand-author novel exploit or
+malware code** — msfvenom generates the payloads; R.O.D.E builds the framework, the
+guardrails, and the teaching, and leans on the established tools for the actual offense.
+Windows Defender will quarantine generated payloads on write (the UI says so, loudly) —
+generate on the Linux attack box or use a lab-only exclusion folder.

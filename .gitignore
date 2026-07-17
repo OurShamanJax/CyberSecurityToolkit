@@ -37,3 +37,6 @@ node_modules/
 
 # ── Archives ──
 *.zip
+
+# stray sandbox temp (delete on Windows: del tests\_pp_test.py)
+tests/_pp_test.py

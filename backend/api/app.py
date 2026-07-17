@@ -107,6 +107,16 @@ class EntityAddIn(BaseModel):
     relation: str = "RELATED_TO"
 
 
+class MsfBuildIn(BaseModel):
+    payload: str
+    lhost: str = ""
+    lport: int = 4444
+    format: str = "raw"
+    encoder: str = "none"
+    iterations: int = 0
+    lab_ack: bool = False   # UI confirms this is an authorized lab target
+
+
 @app.get("/api/health")
 def health():
     return {"status": "ok", "version": "4.0.0", "time": datetime.utcnow().isoformat()}
@@ -363,6 +373,29 @@ def api_capabilities():
     return {"docker": docker_available(force=True), "tshark": capture.available()}
 
 
+@app.get("/api/msf/status")
+def api_msf_status():
+    from .. import metasploit
+    return metasploit.status(force=True)
+
+
+@app.get("/api/msf/payloads")
+def api_msf_payloads():
+    from .. import metasploit
+    return {"payloads": metasploit.PAYLOADS, "formats": metasploit.FORMATS,
+            "encoders": metasploit.ENCODERS}
+
+
+@app.post("/api/msf/preview")
+def api_msf_preview(body: MsfBuildIn):
+    """Validate a build request and return the exact command (without running).
+    Powers the live 'recipe' preview - safe, produces no artifact."""
+    from .. import metasploit
+    opts = body.model_dump()
+    v = metasploit.validate_build(opts)
+    return {**v, "command": metasploit.display_command(opts) if v["ok"] else ""}
+
+
 @app.get("/api/suggest")
 def api_suggest(type: str):
     return {"tools": entity_service.suggest_tools(type)}
@@ -522,6 +555,76 @@ async def ws_capture(ws: WebSocket):
         if proc["p"]:
             try: proc["p"].kill()
             except Exception: pass
+
+
+@app.websocket("/ws/msf")
+async def ws_msf(ws: WebSocket):
+    """One socket for the Metasploit page. Actions:
+      {action:'build', ...opts}  -> stream msfvenom output (+ optional artifact)
+      {action:'console_start'}   -> launch a live msfconsole
+      {action:'console_input', line}
+      {action:'console_stop'}
+    Runs only real upstream tools; refuses a build that fails validation."""
+    import asyncio
+    if not _ws_origin_ok(ws):
+        await ws.close(code=1008)
+        return
+    await ws.accept()
+    from .. import metasploit
+    loop = asyncio.get_event_loop()
+    console = metasploit.Console()
+
+    async def emit(text):
+        try:
+            await ws.send_json({"type": "output", "data": text})
+        except Exception:
+            pass
+
+    try:
+        while True:
+            msg = json.loads(await ws.receive_text())
+            act = msg.get("action")
+
+            if act == "build":
+                opts = {k: msg.get(k) for k in
+                        ("payload", "lhost", "lport", "format", "encoder", "iterations")}
+                if not msg.get("lab_ack"):
+                    await ws.send_json({"type": "error", "message":
+                        "Confirm this is your authorized lab first."})
+                    continue
+                v = metasploit.validate_build(opts)
+                for w in v["warnings"]:
+                    await emit("[WARN] " + w + "\n")
+                if not v["ok"]:
+                    await ws.send_json({"type": "error", "message": "; ".join(v["errors"])})
+                    continue
+                out_dir = str(settings.WORKSPACE_DIR / "payloads")
+                await ws.send_json({"type": "started"})
+                res = await metasploit.run_venom(opts, emit, out_dir=out_dir)
+                await ws.send_json({"type": "done", "exit_code": res["exit_code"],
+                                    "artifact": res.get("artifact")})
+
+            elif act == "console_start":
+                await ws.send_json({"type": "console_starting"})
+                ok = await asyncio.to_thread(console.start, loop, emit)
+                await ws.send_json({"type": "console_started" if ok else "error",
+                                    "message": "" if ok else "could not start msfconsole"})
+
+            elif act == "console_input":
+                console.send(msg.get("line", ""))
+
+            elif act == "console_stop":
+                console.stop()
+                await ws.send_json({"type": "console_stopped"})
+    except WebSocketDisconnect:
+        console.stop()
+    except Exception as e:
+        log.exception("msf ws error")
+        try:
+            await ws.send_json({"type": "error", "message": str(e)})
+        except Exception:
+            pass
+        console.stop()
 
 
 # ---- static frontend (multi-page app shell) -------------------------------
