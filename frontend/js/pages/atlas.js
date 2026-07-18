@@ -6,7 +6,8 @@
 import { $, API, S, COLOR, escapeHtml, toast } from '../core.js';
 
 let viewer=null, baseLayer=null, labelLayer=null, hillLayer=null, camHandler=null, camDS=null, atlasKey=null;
-let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null, cloudLayer=null, rainLayer=null;
+let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null, rainLayer=null;
+let firmsSaved=false, fireDS=null, fireTimer=null, oceanEntities=[];
 let cams=[], camEntities=[], satEntities=[], overlayEntities=[], traceEntities=[], locateEntities=[];
 let importedSources=new Set();
 let spinOn=true, spinSpeed=1, lastInteract=0, modalOpen=false;
@@ -70,8 +71,10 @@ function shell(){ return `
         <label class="ap-row"><input type="checkbox" id="sun" checked/> <span>Sunlight day/night</span></label>
         <label class="ap-row" title="HDR + anti-aliasing — richer light &amp; smoother edges. Turn off if the globe feels sluggish."><input type="checkbox" id="cine" checked/> <span>Cinematic quality (HDR)</span></label>
         <div class="ap-lbl" style="margin-top:9px">Living Earth</div>
-        <label class="ap-row" title="Recent MODIS satellite imagery — real cloud cover from the last ~2 days (NASA GIBS)"><input type="checkbox" id="lyClouds"/> <span>Clouds — recent satellite (NASA)</span></label>
         <label class="ap-row" title="Live global precipitation radar (RainViewer, free)"><input type="checkbox" id="lyRain"/> <span>Precipitation — live radar</span></label>
+        <label class="ap-row" title="Active wildfire detections — NASA FIRMS (free key)"><input type="checkbox" id="lyFire"/> <span>Wildfires — active (NASA FIRMS)</span></label>
+        <div class="ap-row" style="padding-left:22px;gap:5px"><input id="firmsKey" placeholder="FIRMS key (free, optional)" style="flex:1;min-width:0;font-size:11px;padding:4px 7px"/><button class="sm" id="firmsGo">Save</button></div>
+        <label class="ap-row" title="Major world surface currents as directional arrows"><input type="checkbox" id="lyOcean"/> <span>Ocean currents</span></label>
         <div class="muted" style="font-size:10px;padding-left:22px;line-height:1.5">Day/night &amp; seasons already track real time.</div>
       </div>
     </div>
@@ -82,6 +85,45 @@ function shell(){ return `
     <div class="ap-meta" id="cmeta"></div>
   </div>
 
+  <div id="rainKey" style="display:none;position:absolute;top:14px;right:14px;z-index:7;background:rgba(13,17,23,.85);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;pointer-events:none;font-size:11px;color:#cdd6e0;min-width:118px">
+    <div style="font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#4aa3ff;box-shadow:0 0 6px #4aa3ff"></span>Precipitation</div>
+    <div style="display:flex;gap:9px">
+      <div style="width:13px;border-radius:3px;background:linear-gradient(to top,#7ec8ff,#3b7cff,#39c46a,#e8e35a,#f0a53a,#e0454a,#c14ad0)"></div>
+      <div style="display:flex;flex-direction:column;justify-content:space-between;font-size:10px;color:#aeb8c4"><span>Intense</span><span>Heavy</span><span>Moderate</span><span>Light</span></div>
+    </div>
+    <div style="font-size:9.5px;color:#8b97a5;margin-top:8px">live radar · RainViewer</div>
+  </div>
+  <div id="oceanKey" style="display:none;position:absolute;bottom:20px;left:14px;z-index:7;background:rgba(13,17,23,.85);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 13px;pointer-events:none;font-size:11px;color:#cdd6e0">
+    <div style="font-weight:600;margin-bottom:7px">Ocean currents</div>
+    <div style="display:flex;flex-direction:column;gap:4px;font-size:10.5px">
+      <span><span style="display:inline-block;width:16px;height:3px;border-radius:2px;background:#ff6b5a;margin-right:6px;vertical-align:middle"></span>warm</span>
+      <span><span style="display:inline-block;width:16px;height:3px;border-radius:2px;background:#4aa3ff;margin-right:6px;vertical-align:middle"></span>cold</span>
+      <span style="color:#8b97a5;font-size:9.5px;margin-top:2px">arrow = flow direction</span>
+    </div>
+  </div>
+  <div id="compass" title="Drag to move · drag the corner to resize · double-click for north-up" style="position:absolute;bottom:74px;left:14px;width:82px;height:82px;z-index:8;cursor:grab;resize:both;overflow:hidden;min-width:58px;min-height:58px;max-width:220px;max-height:220px">
+    <svg viewBox="0 0 100 100" style="width:100%;height:100%;display:block;pointer-events:none">
+      <circle cx="50" cy="50" r="46" fill="rgba(13,17,23,.72)" stroke="rgba(255,255,255,.18)" stroke-width="1.5"/>
+      <g id="compassRose">
+        <polygon points="50,9 43,50 57,50" fill="#e0454a"/>
+        <polygon points="50,91 43,50 57,50" fill="#c9d3df"/>
+        <circle cx="50" cy="50" r="3" fill="#e7ebf0"/>
+        <text x="50" y="25" text-anchor="middle" fill="#ff6b6f" font-size="13" font-weight="bold" font-family="sans-serif">N</text>
+        <text x="50" y="89" text-anchor="middle" fill="#8b97a5" font-size="9" font-family="sans-serif">S</text>
+        <text x="84" y="54" text-anchor="middle" fill="#8b97a5" font-size="9" font-family="sans-serif">E</text>
+        <text x="16" y="54" text-anchor="middle" fill="#8b97a5" font-size="9" font-family="sans-serif">W</text>
+      </g>
+    </svg>
+  </div>
+  <div id="fireKey" style="display:none;position:absolute;bottom:20px;right:14px;z-index:7;background:rgba(13,17,23,.85);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:11px 13px;pointer-events:none;font-size:11px;color:#cdd6e0;min-width:130px">
+    <div style="font-weight:600;margin-bottom:8px;display:flex;align-items:center;gap:6px"><span style="width:8px;height:8px;border-radius:50%;background:#ff3b30;box-shadow:0 0 6px #ff3b30"></span>Active wildfires</div>
+    <div style="display:flex;flex-direction:column;gap:4px;font-size:10.5px">
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#ff3b30;margin-right:6px;vertical-align:middle"></span>high confidence</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#ff8c1a;margin-right:6px;vertical-align:middle"></span>nominal</span>
+      <span><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#ffd23a;margin-right:6px;vertical-align:middle"></span>low</span>
+    </div>
+    <div id="fireCount" style="font-size:9.5px;color:#8b97a5;margin-top:8px">NASA FIRMS · last 24h</div>
+  </div>
   <div id="satView" style="position:absolute;inset:0;display:none;pointer-events:none;z-index:6">
     <div id="satFx">
       <div class="sv-drift"><div class="sv-vig"></div><div class="sv-scan"></div><div class="sv-grain"></div></div>
@@ -132,6 +174,7 @@ function initCesium(){
   let cine=true; try{ const c=localStorage.getItem('rode.atlasCine'); if(c!==null)cine=c==='1'; }catch(e){}
   setCinematic(cine);
   viewer.scene.preRender.addEventListener(()=>{
+    updateCompass();
     if(satView){ followSat(); return; }
     if(!spinOn || modalOpen) return;
     if(Date.now()-lastInteract < 1500) return;
@@ -145,7 +188,7 @@ function initCesium(){
     satViewAlt=Math.max(150, Math.min(satViewAlt*(e.deltaY>0?1.15:0.86), 9000000));
   }, {passive:false});
   camDS=new Cesium.CustomDataSource('cams'); viewer.dataSources.add(camDS);
-  const cl=camDS.clustering; cl.enabled=true; cl.pixelRange=42; cl.minimumClusterSize=4;
+  const cl=camDS.clustering; cl.enabled=true; cl.pixelRange=48; cl.minimumClusterSize=2;
   cl.clusterEvent.addEventListener((ents,cluster)=>{
     cluster.label.show=true; cluster.label.text=String(ents.length);
     cluster.label.font='bold 11px sans-serif'; cluster.label.fillColor=Cesium.Color.WHITE;
@@ -161,6 +204,7 @@ function initCesium(){
     const id=p.id;
     if(Array.isArray(id)){ try{ viewer.flyTo(id,{duration:1.2}); }catch(e){} return; }
     if(id._cam)openCam(id._cam); else if(id._sat)openSat(id._sat);
+    else if(id._fire)showFire(id._fire);
     else if(id._hop)showHop(id._hop); else if(id._node)showNode(id._node); else if(id._loc)showLoc(id._loc);
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
   viewer.camera.moveEnd.addEventListener(onViewChanged);
@@ -182,34 +226,140 @@ function setLabels(on){
 function setHill(on){
   if(!viewer)return;
   if(hillLayer){ viewer.imageryLayers.remove(hillLayer,true); hillLayer=null; }
-  if(on){ hillLayer=viewer.imageryLayers.addImageryProvider(esri('Elevation/World_Hillshade')); hillLayer.alpha=0.45;
-    if(baseLayer) viewer.imageryLayers.raise(hillLayer); }
+  if(on){ hillLayer=viewer.imageryLayers.addImageryProvider(esri('Elevation/World_Hillshade'));
+    hillLayer.alpha=0.28;                                    // subtle relief, not a gray sheet
+    if(labelLayer) viewer.imageryLayers.raiseToTop(labelLayer);  // keep labels crisp on top
+  }
 }
 
 // ── Living Earth: real-data imagery layers (free, no key) ──
-function _gibsDate(){ const d=new Date(Date.now()-36*3600*1000); return d.toISOString().slice(0,10); }
-function setClouds(on){ if(!viewer)return;
-  if(cloudLayer){ try{ viewer.imageryLayers.remove(cloudLayer,true); }catch(e){} cloudLayer=null; }
-  if(!on)return;
-  try{
-    const p=new Cesium.UrlTemplateImageryProvider({
-      url:'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/'+_gibsDate()+'/250m/{z}/{y}/{x}.jpg',
-      tilingScheme:new Cesium.GeographicTilingScheme(), maximumLevel:8, credit:'NASA GIBS' });
-    cloudLayer=viewer.imageryLayers.addImageryProvider(p);
-    if(labelLayer) viewer.imageryLayers.raiseToTop(labelLayer);   // keep place names readable
-  }catch(e){ toast('Cloud layer unavailable (needs internet)','warn'); }
-}
 async function setRain(on){ if(!viewer)return;
   if(rainLayer){ try{ viewer.imageryLayers.remove(rainLayer,true); }catch(e){} rainLayer=null; }
-  if(!on)return;
+  const key=$('#rainKey');
+  if(!on){ if(key)key.style.display='none'; return; }
   try{
     const meta=await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json();
     const host=meta.host, past=(meta.radar&&meta.radar.past)||[]; const fr=past[past.length-1];
-    if(!host||!fr){ toast('No radar frames right now','warn'); const c=$('#lyRain'); if(c)c.checked=false; return; }
-    const p=new Cesium.UrlTemplateImageryProvider({ url:host+fr.path+'/256/{z}/{x}/{y}/2/1_1.png', maximumLevel:10, credit:'RainViewer' });
+    if(!host||!fr){ toast('No radar frames right now','warn'); const c=$('#lyRain'); if(c)c.checked=false; if(key)key.style.display='none'; return; }
+    // cap at RainViewer's radar resolution — beyond this Cesium upsamples the last
+    // good tiles instead of requesting "Zoom Level Not Supported" placeholders.
+    const p=new Cesium.UrlTemplateImageryProvider({ url:host+fr.path+'/256/{z}/{x}/{y}/2/1_1.png', maximumLevel:7, credit:'RainViewer' });
     rainLayer=viewer.imageryLayers.addImageryProvider(p); rainLayer.alpha=0.72;
     if(labelLayer) viewer.imageryLayers.raiseToTop(labelLayer);
-  }catch(e){ toast('Precipitation radar unavailable (needs internet)','warn'); const c=$('#lyRain'); if(c)c.checked=false; }
+    if(key)key.style.display='block';
+  }catch(e){ toast('Precipitation radar unavailable (needs internet)','warn'); const c=$('#lyRain'); if(c)c.checked=false; if(key)key.style.display='none'; }
+}
+
+// ── wildfires (NASA FIRMS, optional free key) ──
+async function initFirms(){ try{ const st=await API('/secrets'); firmsSaved=!!(st&&st.firms); }catch(e){}
+  const fk=$('#firmsKey'); if(fk&&firmsSaved) fk.placeholder='FIRMS key saved ✓'; }
+function fireColor(conf){ const c=(conf||'').toString().toLowerCase();
+  if(c==='h'||c==='high') return '#ff3b30';
+  if(c==='l'||c==='low') return '#ffd23a';
+  if(c==='n'||c==='nominal') return '#ff8c1a';
+  const n=parseFloat(c); if(!isNaN(n)) return n>=80?'#ff3b30':(n>=40?'#ff8c1a':'#ffd23a');
+  return '#ff8c1a'; }
+const _fireIconCache={};
+function fireIcon(col){ if(_fireIconCache[col]) return _fireIconCache[col];
+  const uri="data:image/svg+xml,"+encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='22' height='22' viewBox='0 0 24 24'>"+
+    "<path d='M12 23c4.4 0 7-2.9 7-6.4 0-2.6-1.6-4.2-3-6.1-0.9 1.9-1.9 2.4-2.8 1.9 0.6-2.6-0.6-5.2-3.2-7.4-0.3 3-1.9 4.6-2.9 6.6C6.4 12 6 13.4 6 15.1 6 20 8.6 23 12 23z' fill='"+col+"' stroke='#2a0800' stroke-width='1' stroke-linejoin='round'/>"+
+    "<path d='M12 20.6c1.9 0 3.2-1.3 3.2-2.9 0-1.5-1.2-2.4-2-3.6-0.9 1.6-1.7 1.7-2.4 1.2 0.2 1.6-0.9 2.6-1.6 3.3-0.3 0.4-0.4 0.8-0.4 1.1 0 1.1 1.3 1.8 3.2 1.8z' fill='#ffe08a' opacity='0.92'/></svg>");
+  _fireIconCache[col]=uri; return uri; }
+async function setFires(on){ if(!viewer)return;
+  if(!fireDS){ fireDS=new Cesium.CustomDataSource('fires'); viewer.dataSources.add(fireDS); }
+  const key=$('#fireKey');
+  if(!on){ fireDS.entities.removeAll(); if(key)key.style.display='none'; return; }
+  if(!firmsSaved){ toast('Save your free FIRMS key first','warn'); const c=$('#lyFire'); if(c)c.checked=false; return; }
+  await loadFires(true);
+}
+async function loadFires(explicit){
+  const on=$('#lyFire'); if(!viewer||!fireDS||!on||!on.checked) return;
+  const v=viewRectDeg(); if(!v) return;
+  const bbox=v[0].toFixed(3)+','+v[1].toFixed(3)+','+v[2].toFixed(3)+','+v[3].toFixed(3);
+  let r; try{ r=await (await fetch('/api/fires?days=1&bbox='+encodeURIComponent(bbox))).json(); }
+  catch(e){ if(explicit)toast('FIRMS request failed','warn'); return; }
+  if(!r||!r.ok){ if(explicit)toast('FIRMS: '+((r&&r.error)||'error'),'warn');
+    if(r&&/key/i.test(r.error||'')){ const c=$('#lyFire'); if(c)c.checked=false; const k=$('#fireKey'); if(k)k.style.display='none'; } return; }
+  fireDS.entities.removeAll();
+  (r.fires||[]).forEach(f=>{ fireDS.entities.add({ position:Cesium.Cartesian3.fromDegrees(+f.lng,+f.lat),
+      billboard:{ image:fireIcon(fireColor(f.conf)), width:18, height:18,
+        verticalOrigin:Cesium.VerticalOrigin.BOTTOM,
+        disableDepthTestDistance:Number.POSITIVE_INFINITY,
+        scaleByDistance:new Cesium.NearFarScalar(1.0e5,1.5,1.2e7,0.5) }, _fire:f }); });
+  const key=$('#fireKey'); if(key)key.style.display='block';
+  const fc=$('#fireCount'); if(fc)fc.textContent='NASA FIRMS · '+(r.count||0)+' detections · last 24h';
+  if(explicit&&r.count===0) toast('No active fires in this view','ok');
+  else if(explicit) toast(r.count+' active fire detection(s) in view','ok');
+}
+function showFire(f){ setInfo('<b>🔥 Active fire</b><div class="muted" style="margin-top:4px;line-height:1.6">'+
+  (+f.lat).toFixed(3)+', '+(+f.lng).toFixed(3)+'<br>confidence: '+escapeHtml(f.conf||'—')+
+  ' · FRP: '+escapeHtml(String(f.frp||'—'))+' MW<br>'+escapeHtml((f.date||'')+' '+(f.time||''))+' UTC · '+escapeHtml(f.sat||'')+
+  '<br><span style="color:#8b97a5">NASA FIRMS detection — a thermal hotspot, not confirmed damage.</span></div>'); }
+
+// ── ocean currents: major surface currents as directional arrows (warm/cold) ──
+// Curated, stable paths (points in flow direction); the arrowhead shows heading.
+const OCEAN_CURRENTS=[
+  {name:'Gulf Stream', warm:true, pts:[[25,-80],[30,-79],[35,-74],[40,-64],[44,-52],[48,-38]]},
+  {name:'North Atlantic Drift', warm:true, pts:[[48,-38],[53,-28],[57,-16],[61,-4],[63,7]]},
+  {name:'Labrador Current', warm:false, pts:[[61,-56],[55,-54],[49,-50],[44,-49]]},
+  {name:'Canary Current', warm:false, pts:[[34,-11],[28,-15],[21,-18],[15,-19]]},
+  {name:'Benguela Current', warm:false, pts:[[-34,18],[-28,14],[-21,11],[-15,11]]},
+  {name:'Agulhas Current', warm:true, pts:[[-26,34],[-31,30],[-36,26],[-39,22]]},
+  {name:'Brazil Current', warm:true, pts:[[-12,-37],[-20,-39],[-29,-48],[-37,-54]]},
+  {name:'Kuroshio', warm:true, pts:[[22,122],[28,128],[33,136],[36,143],[40,152],[42,163]]},
+  {name:'Oyashio', warm:false, pts:[[55,161],[49,153],[43,146]]},
+  {name:'California Current', warm:false, pts:[[47,-126],[40,-124],[34,-121],[27,-115],[23,-111]]},
+  {name:'Humboldt Current', warm:false, pts:[[-41,-75],[-31,-72],[-20,-71],[-10,-79],[-5,-83]]},
+  {name:'East Australian Current', warm:true, pts:[[-25,154],[-31,153],[-37,150],[-40,149]]},
+  {name:'Antarctic Circumpolar', warm:false, pts:[[-56,-70],[-58,-20],[-60,40],[-58,100],[-56,160]]},
+  {name:'N. Equatorial Current', warm:true, pts:[[12,-18],[12,-40],[12,-62]]},
+  {name:'S. Equatorial Current', warm:true, pts:[[-4,10],[-4,-15],[-4,-36]]},
+];
+function setOcean(on){ if(!viewer)return;
+  oceanEntities.forEach(e=>{ try{ viewer.entities.remove(e); }catch(_){} }); oceanEntities=[];
+  const key=$('#oceanKey');
+  if(!on){ if(key)key.style.display='none'; return; }
+  OCEAN_CURRENTS.forEach(cur=>{
+    const col=Cesium.Color.fromCssColorString(cur.warm?'#ff6b5a':'#4aa3ff').withAlpha(0.92);
+    const flat=[]; cur.pts.forEach(p=>{ flat.push(p[1], p[0], 60000); });   // lng,lat,height
+    const line=viewer.entities.add({ polyline:{ positions:Cesium.Cartesian3.fromDegreesArrayHeights(flat),
+      width:9, arcType:Cesium.ArcType.GEODESIC,
+      material:new Cesium.PolylineArrowMaterialProperty(col) } });
+    oceanEntities.push(line);
+    const mid=cur.pts[Math.floor(cur.pts.length/2)];
+    const lbl=viewer.entities.add({ position:Cesium.Cartesian3.fromDegrees(mid[1],mid[0],60000),
+      label:{ text:cur.name, font:'600 10px sans-serif',
+        fillColor:Cesium.Color.fromCssColorString(cur.warm?'#ffb3aa':'#a9d4ff'),
+        outlineColor:Cesium.Color.BLACK, outlineWidth:2, style:Cesium.LabelStyle.FILL_AND_OUTLINE,
+        pixelOffset:new Cesium.Cartesian2(0,-10), scale:0.95,
+        translucencyByDistance:new Cesium.NearFarScalar(6.0e6,1.0,4.0e7,0.35),
+        disableDepthTestDistance:Number.POSITIVE_INFINITY } });
+    oceanEntities.push(lbl);
+  });
+  if(key)key.style.display='block';
+}
+
+// ── compass: rotate the rose to match camera heading; draggable + resizable ──
+let _compassRose=null;
+function updateCompass(){ if(!viewer)return;
+  if(!_compassRose) _compassRose=document.getElementById('compassRose');
+  if(!_compassRose)return;
+  const deg=Cesium.Math.toDegrees(viewer.camera.heading);
+  _compassRose.setAttribute('transform','rotate('+(-deg).toFixed(1)+' 50 50)'); }
+function initCompass(){ const el=$('#compass'); if(!el)return; _compassRose=null;
+  el.addEventListener('mousedown',e=>{
+    const r=el.getBoundingClientRect();
+    if(e.clientX>r.right-18 && e.clientY>r.bottom-18) return;      // let the resize corner work
+    e.preventDefault(); const host=el.parentElement.getBoundingClientRect();
+    const ox=e.clientX-r.left, oy=e.clientY-r.top; el.style.cursor='grabbing';
+    const mv=ev=>{ el.style.left=Math.max(0,ev.clientX-host.left-ox)+'px'; el.style.top=Math.max(0,ev.clientY-host.top-oy)+'px'; el.style.bottom='auto'; };
+    const up=()=>{ el.style.cursor='grab'; document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+  el.addEventListener('dblclick',()=>{ if(!viewer)return; const p=viewer.camera.positionCartographic;
+    try{ viewer.camera.flyTo({ destination:Cesium.Cartesian3.fromRadians(p.longitude,p.latitude,p.height),
+      orientation:{heading:0,pitch:viewer.camera.pitch,roll:0}, duration:0.6 }); }catch(e){} });
 }
 
 // HDR + MSAA — the heavier realism knobs, gated so users can drop them if it lags.
@@ -489,6 +639,7 @@ async function loadCams(){
 }
 function onViewChanged(){
   clearTimeout(viewChangeTimer);
+  const fl=$('#lyFire'); if(fl&&fl.checked){ clearTimeout(fireTimer); fireTimer=setTimeout(()=>loadFires(false),700); }
   viewChangeTimer=setTimeout(async ()=>{ if(!layers.cam)return;
     const imp=await autoImportForView(); if(imp){ try{ const d=await API('/cams'); cams=d.cameras||[]; }catch(e){} }
     addCamEntities(); }, 450);
@@ -607,8 +758,17 @@ function mount(root){
   $('#labels').onchange=e=>setLabels(e.target.checked);
   $('#sun').onchange=e=>{ if(viewer)viewer.scene.globe.enableLighting=e.target.checked; };
   $('#cine').onchange=e=>setCinematic(e.target.checked);
-  $('#lyClouds').onchange=e=>setClouds(e.target.checked);
   $('#lyRain').onchange=e=>setRain(e.target.checked);
+  $('#lyFire').onchange=e=>setFires(e.target.checked);
+  $('#lyOcean').onchange=e=>setOcean(e.target.checked);
+  const fk=$('#firmsKey'); if(fk){ fk.onkeydown=ev=>{ if(ev.key==='Enter') $('#firmsGo').click(); }; }
+  $('#firmsGo').onclick=async ()=>{ const val=(fk&&fk.value.trim())||'';
+    if(val){ try{ await fetch('/api/secrets/firms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:val})}); }catch(e){}
+      firmsSaved=true; if(fk){ fk.value=''; fk.placeholder='FIRMS key saved ✓'; } toast('FIRMS key saved','ok');
+      const lf=$('#lyFire'); if(lf&&!lf.checked)lf.checked=true; setFires(true); }
+    else if(!firmsSaved){ toast('Paste your free FIRMS key first','warn'); } };
+  initFirms();
+  initCompass();
   try{ const c=localStorage.getItem('rode.atlasCine'); if(c!==null&&$('#cine'))$('#cine').checked=c==='1'; }catch(e){}
   $('#spin').onchange=e=>{ spinOn=e.target.checked; try{ localStorage.setItem('rode.atlasSpin', spinOn?'1':'0'); }catch(_){} };
   $('#spd').onchange=e=>{ spinSpeed=+e.target.value||1; };
@@ -647,7 +807,8 @@ function unmount(){
   if(camHandler){ try{camHandler.destroy();}catch(e){} camHandler=null; }
   if(viewer){ try{viewer.destroy();}catch(e){} viewer=null; }
   cams=[]; camEntities=[]; satEntities=[]; overlayEntities=[]; traceEntities=[]; locateEntities=[];
-  importedSources=new Set(); baseLayer=labelLayer=hillLayer=cloudLayer=rainLayer=null;
+  importedSources=new Set(); baseLayer=labelLayer=hillLayer=rainLayer=null;
+  clearTimeout(fireTimer); fireDS=null; _compassRose=null; oceanEntities=[];
 }
 function refresh(){ if(viewer) try{ loadOverlay(); }catch(e){} }
 export default { id:'atlas', label:'Atlas', short:'Atlas', mount, unmount, refresh };

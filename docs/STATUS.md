@@ -117,10 +117,14 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
       saturation/brightness; **Cinematic quality** toggle for HDR + MSAA (default on, drop it
       if it lags). `[done]`
 - [x] **Living Earth layers** — real-time sun/seasons (day-night terminator tracks the real
-      clock); toggleable **Clouds — recent satellite** (NASA GIBS MODIS) and **live
-      Precipitation radar** (RainViewer). Free/no-key; graceful offline failure. `[done]`
-- [ ] **Ocean currents** (stretch) — animated particle flow from NOAA/OSCAR vector data; needs
-      a custom Cesium particle layer, a bigger lift than a tile layer.
+      clock); toggleable **Precipitation radar** (RainViewer, free) with a color key; and
+      **Wildfires** (NASA FIRMS active fire detections, optional free key stored server-side
+      like Windy) coloured by confidence, viewport-loaded, with a color key + click detail.
+      Clouds layer was removed (GIBS tile jank). `[done]`
+- [x] **Ocean currents** — major world surface currents as directional **arrows** (warm=red /
+      cold=blue) with labels + a color key. Curated stable paths, no key. `[done]`
+- [x] **Compass** — draggable + resizable rose that tracks camera heading; double-click =
+      north-up. `[done]`
 - [ ] **Camera-type icons** — done: highway / intersection / roundabout / metro / bridge /
       street / webcam glyphs + legend. `[done]`
 

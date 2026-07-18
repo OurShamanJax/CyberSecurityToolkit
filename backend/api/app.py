@@ -347,7 +347,7 @@ def api_cams_windy(body: WindyIn):
 def api_secrets():
     """Which secrets are configured (booleans only - never returns the values)."""
     from ..cams import get_secret
-    return {"windy": bool(get_secret("windy_key"))}
+    return {"windy": bool(get_secret("windy_key")), "firms": bool(get_secret("firms_key"))}
 
 
 @app.post("/api/secrets/windy")
@@ -357,6 +357,23 @@ def api_set_windy(body: SecretIn):
     k = body.key.strip()
     set_secret("windy_key", k)
     return {"ok": True, "windy": bool(k)}
+
+
+@app.post("/api/secrets/firms")
+def api_set_firms(body: SecretIn):
+    """Persist the NASA FIRMS key in data/secrets.json (gitignored)."""
+    from ..cams import set_secret
+    k = body.key.strip()
+    set_secret("firms_key", k)
+    return {"ok": True, "firms": bool(k)}
+
+
+@app.get("/api/fires")
+def api_fires(bbox: str = "", days: int = 1):
+    """Active wildfire detections (NASA FIRMS) for a bbox 'w,s,e,n'."""
+    from .. import wildfire
+    bb = bbox.split(",") if bbox else None
+    return wildfire.fires(bb, days)
 
 
 @app.delete("/api/cams/{cid}")
