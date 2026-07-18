@@ -151,9 +151,12 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - [ ] Consistency pass so every page uses one template.
 
 ### Platform / setup
-- [ ] Document **WSL2 + usbipd** path for monitor-mode WiFi (deauth / handshake) on Windows.
-- [ ] AV guidance for offensive tooling (exclusions, why Defender flags it).
-- [ ] Dogfood: run Trivy on R.O.D.E itself; add `pip-audit` to the launcher.
+- [x] Document **WSL2 + usbipd** path for monitor-mode WiFi (deauth / handshake) on Windows.
+      → `docs/OFFENSIVE_SETUP.md` §1 (hardware, usbipd steps, honest WSL-kernel caveats).
+- [x] AV guidance for offensive tooling (exclusions, why Defender flags it).
+      → `docs/OFFENSIVE_SETUP.md` §2 (isolate in VM/Docker, one narrow exclusion folder).
+- [x] Dogfood: `pip-audit` in the launcher (`start.bat audit`) + Trivy documented.
+      pip-audit run on requirements = **no known vulnerabilities**. `[done]`
 
 ---
 

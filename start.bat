@@ -25,6 +25,9 @@ if not exist ".venv\Scripts\python.exe" (
 )
 set PY=.venv\Scripts\python.exe
 
+REM  ---- security self-check:  start.bat audit  ----
+if /I "%~1"=="audit" goto :audit
+
 echo   [*] Installing / upgrading dependencies...
 "%PY%" -m pip install --quiet --upgrade pip
 "%PY%" -m pip install --quiet --upgrade -r requirements.txt
@@ -42,3 +45,19 @@ start "" http://127.0.0.1:8000
 "%PY%" -m backend.run
 
 pause
+exit /b 0
+
+REM ============================================================
+REM  Security self-check (dogfood):  start.bat audit
+REM ============================================================
+:audit
+echo.
+echo   [*] R.O.D.E security self-check (pip-audit)...
+"%PY%" -m pip install --quiet --upgrade pip pip-audit
+"%PY%" -m pip_audit -r requirements.txt
+echo.
+echo   Tip: also run  trivy fs .  from this folder for secrets + misconfig scanning.
+echo   (see docs\OFFENSIVE_SETUP.md)
+echo.
+pause
+exit /b 0

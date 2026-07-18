@@ -26,6 +26,10 @@ install there. Linux is the smoothest experience for the offensive tooling.
 
 No Node.js needed — the frontend is plain files served by the backend.
 
+> **Offensive tooling on Windows** (monitor-mode WiFi via WSL2 + usbipd, and antivirus /
+> Defender guidance) is documented in [`docs/OFFENSIVE_SETUP.md`](docs/OFFENSIVE_SETUP.md).
+> Audit R.O.D.E's own dependencies any time with `start.bat audit` (pip-audit).
+
 ## 2. Install & run
 
 ```bash
