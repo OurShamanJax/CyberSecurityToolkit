@@ -1,7 +1,7 @@
 // pages/traffic.js — Live Traffic Monitor. Real tshark capture when available,
 // clearly-labelled simulated feed otherwise. Play/pause/speed control the DISPLAY
 // (buffer + drain), which works for both real and simulated sources.
-import { $, toast, S, escapeHtml } from '../core.js';
+import { $, toast, S, escapeHtml, pageHead } from '../core.js';
 import { renderInspector } from '../inspector.js';
 let ws=null, mode='sim', playing=false, speed=1, seq=0, rows=[], buffer=[], sel=null, ifaces=[];
 let drainTimer=null, simTimer=null, capStarted=false;
@@ -39,8 +39,11 @@ async function loadLan(){
 }
 
 function shell(){ return `
-<div class="page"><div class="page-h"><h2>Live Traffic <span class="tag" id="modetag">…</span></h2>
-  <p>Realtime traffic with defensive alerting. Uses <b>tshark</b> for real capture when installed with privileges; otherwise a clearly-labelled simulated feed. Play/pause and speed control the display in both modes.</p></div>
+<div class="page">${pageHead({
+  title:'Live Traffic', tag:'…', tagId:'modetag',
+  intro:'Realtime traffic with defensive alerting. Uses <b>tshark</b> for real capture when installed with privileges; otherwise a clearly-labelled simulated feed. Play/pause and speed control the display in both modes.',
+  help:"This is the <b>defensive</b> side of R.O.D.E — watching your own wire. Real capture needs tshark (part of Wireshark) running with capture privileges / Npcap on Windows; without it you get a clearly-labelled simulated feed so the UI still makes sense. Each packet is annotated in plain English (this PC / your router / a vendor device / the internet) and flagged when a heuristic alert fires. Play/pause and speed act on the display buffer, not the capture, so you can pause a busy feed and read it."
+})}
 <div class="page-body">
   <div class="tf-banner" id="banner">Connecting to capture engine…</div>
   <div class="tf-ctrl">

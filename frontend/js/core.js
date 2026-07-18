@@ -4,6 +4,19 @@ export const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
 export const API = p => fetch('/api'+p).then(r=>r.json());
 export const escapeHtml = s => String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
+// Shared page header — one template for every tool page.
+// { title, tag?, tagId?(dynamic tag span id), intro?, actions?(html for right side), help?(collapsible "How this works") }
+export function pageHead({title, tag='', tagId='', intro='', actions='', help=''}){
+  return `<div class="page-h">
+    <div class="ph-top">
+      <h2>${title}${(tag||tagId)?` <span class="tag"${tagId?` id="${tagId}"`:''}>${tag}</span>`:''}</h2>
+      ${actions?`<div class="ph-actions">${actions}</div>`:''}
+    </div>
+    ${intro?`<p>${intro}</p>`:''}
+    ${help?`<details class="ph-help"><summary>How this works · when to use it</summary><div class="ph-help-body">${help}</div></details>`:''}
+  </div>`;
+}
+
 export const NOISE = ["silent","whisper","moderate","loud","aggressive"];
 export const NM = {
   silent:{c:"var(--silent)",t:"Ghost",d:"no packets touch the target — undetectable"},

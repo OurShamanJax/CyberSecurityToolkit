@@ -1,18 +1,19 @@
 // pages/exposure.js — internet-exposure lookup (Shodan InternetDB, free/no-account)
-import { $, API, S, escapeHtml, toast } from '../core.js';
-import { updateFootprint } from '../app.js';
+import { $, API, S, escapeHtml, toast, pageHead } from '../core.js';
+import { updateFootprint, sendToBar } from '../app.js';
 let last=null;
 function shell(){ return `
-<div class="page"><div class="page-h"><h2>Exposure <span class="tag">what the internet sees</span></h2>
-  <p>Look up what's already indexed as exposed on an IP — open ports, detected products, and known CVEs — using <b>Shodan InternetDB</b> (free, no account). Point it at <b>your own</b> public IP to audit your front door. It's a per-IP lookup, so it shows exposure, not a target list.</p></div>
-<div class="page-body"><div class="grid2">
+<div class="page">${pageHead({
+  title:'Exposure', tag:'what the internet sees',
+  intro:"Look up what's already indexed as exposed on an IP — open ports, detected products, and known CVEs — using <b>Shodan InternetDB</b> (free, no account). Point it at <b>your own</b> public IP to audit your front door. It's a per-IP lookup, so it shows exposure, not a target list.",
+  help:"Anything internet-facing gets indexed by exposure engines like Shodan. If a device answers on a port with a banner that reveals old firmware, it's findable — and if it also has default creds, it's trivially abusable. The lesson: close ports you don't need, patch what's exposed, and put admin behind a VPN. Best used on systems you own or are authorized to assess — this reads public index data, it does not scan or touch the target."
+})}
+<div class="page-body">
   <div class="card2"><h3>Look up an IP or domain</h3>
     <input id="tgt" placeholder="e.g. your-public-ip or example.com" style="width:100%;margin:8px 0"/>
     <div style="display:flex;gap:8px"><button class="ghost" id="mine" style="flex:1">Use my public IP</button><button class="primary" id="go" style="flex:1">Look up</button></div>
     <div class="muted">Best used on systems you own or are authorized to assess. This reads public index data — it does not scan or touch the target.</div>
   </div>
-  <div class="card2"><h3>What this teaches</h3><p class="muted">Anything internet-facing gets indexed by exposure engines like Shodan. If a device answers on a port with a banner that reveals old firmware, it's findable — and if it also has default creds, it's trivially abusable. The lesson: close ports you don't need, patch what's exposed, and put admin behind a VPN.</p></div>
-</div>
 <div id="res"></div>
 </div></div>`; }
 function mount(root){
@@ -30,7 +31,7 @@ async function run(){
     if(!r.ok){ $('#res').innerHTML=`<div class="card2"><p style="color:#eaa0a1">✗ ${escapeHtml(r.error)}</p></div>`; return; }
     const chip=(x,c)=>`<span class="ins-chip" style="${c||''}">${escapeHtml(x)}</span>`;
     let h=`<div class="card2"><div style="display:flex;align-items:center;gap:10px"><h3 style="margin:0;flex:1">${escapeHtml(r.host)} <span class="mono" style="font-size:12px;color:var(--dim)">${escapeHtml(r.ip)}</span></h3>
-      <button class="sm primary" id="addG">Add to graph</button></div>`;
+      <span id="expActions"></span></div>`;
     if(r.note) h+=`<p class="muted" style="margin-top:8px;color:var(--ok)">${escapeHtml(r.note)}</p>`;
     h+=`<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(210px,1fr));gap:12px;margin-top:12px">
       <div><div class="ins-run-t">Open ports (${r.ports.length})</div><div class="ins-chips">${r.ports.map(p=>chip(p)).join('')||'<span class="muted">none</span>'}</div></div>
@@ -44,7 +45,11 @@ async function run(){
     } else h+=`<p class="muted" style="margin-top:12px">No known CVEs indexed for these services.</p>`;
     h+=`</div>`;
     $('#res').innerHTML=h;
-    $('#addG').onclick=addToGraph;
+    $('#expActions').appendChild(sendToBar({
+      add:addToGraph,
+      sends:[{label:'Scan ports (Nmap) →', page:'investigation', ctx:{tool:'nmap', target:r.ip}},
+             {label:'Find exploits →', page:'exploit', ctx:{target:r.ip}}]
+    }));
   }catch(e){ $('#go').disabled=false; $('#res').innerHTML='<div class="muted">Lookup failed — is the server running / online?</div>'; }
 }
 async function addToGraph(){

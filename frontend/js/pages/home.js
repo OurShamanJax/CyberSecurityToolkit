@@ -1,7 +1,7 @@
 // pages/home.js — the front door. A command-center landing screen: what
 // investigation you're in, what it holds, the latest findings, and one-click
 // jumps into the work. Reads the same endpoints the tools do.
-import { $, API, S, escapeHtml, toast, NM } from '../core.js';
+import { $, API, S, escapeHtml, toast, NM, pageHead } from '../core.js';
 import { show, sendTo, selectInv } from '../app.js';
 
 const SEVW={critical:4,high:3,medium:2,low:1,info:0};
@@ -43,10 +43,11 @@ function showTour(force){
 }
 
 function shell(){ return `
-<div class="page"><div class="page-h" style="display:flex;align-items:flex-start;gap:12px">
-  <div style="flex:1"><h2>Home</h2>
-  <p>Your command center — pick up where you left off, see what R.O.D.E has found, and jump straight into the work.</p></div>
-  <button class="sm ghost" id="tourBtn" title="Replay the guided tour">Take the tour</button></div>
+<div class="page">${pageHead({
+  title:'Home',
+  intro:'Your command center — pick up where you left off, see what R.O.D.E has found, and jump straight into the work.',
+  actions:'<button class="sm ghost" id="tourBtn" title="Replay the guided tour">Take the tour</button>'
+})}
 <div class="page-body" id="homeBody"><div class="muted" style="padding:20px">Loading…</div></div></div>`; }
 
 function actionCard(icon,title,sub,onclick,accent){

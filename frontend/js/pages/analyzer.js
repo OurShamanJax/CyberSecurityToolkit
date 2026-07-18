@@ -1,11 +1,14 @@
 // pages/analyzer.js — unified app/binary/directory analysis with expand-to-detail
-import { $, API, S, escapeHtml, makeTyper, toast, runTool } from '../core.js';
+import { $, API, S, escapeHtml, makeTyper, toast, runTool, pageHead } from '../core.js';
 import { updateFootprint } from '../app.js';
 let tab='running', view='list';
 
 function shell(){ return `
-<div class="page"><div class="page-h"><h2>Analyzer <span class="tag">unified</span></h2>
-  <p>Statically analyze what a program can do — read/write memory, inject, key-log, phone home — plus scan folders for vulnerable dependencies and leaked secrets. Pick a <b>running app</b>, a <b>folder</b>, or a <b>file path</b>. Runs locally / in Docker and lands in this investigation's graph.</p></div>
+<div class="page">${pageHead({
+  title:'Analyzer', tag:'unified',
+  intro:"Statically analyze what a program can do — read/write memory, inject, key-log, phone home — plus scan folders for vulnerable dependencies and leaked secrets. Pick a <b>running app</b>, a <b>folder</b>, or a <b>file path</b>. Runs locally / in Docker and lands in this investigation's graph.",
+  help:"<b>Static</b> analysis means R.O.D.E reads the program without running it — so inspecting a suspicious binary is safe. The <b>Running apps</b> tab lists live processes (needs psutil); <b>Directory</b> runs Trivy over a folder for vulnerable dependencies and leaked secrets; <b>File path</b> inspects a single .exe/.dll/ELF for its capabilities. Everything attaches to the current investigation's graph."
+})}
 <div class="page-body" id="abody"></div></div>`; }
 
 function listView(root){

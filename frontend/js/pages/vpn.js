@@ -1,11 +1,12 @@
 // pages/vpn.js — real WireGuard config generator
-import { $, escapeHtml, toast } from '../core.js';
+import { $, escapeHtml, toast, pageHead } from '../core.js';
 function shell(){ return `
-<div class="page"><div class="page-h"><h2>VPN <span class="tag">WireGuard generator</span></h2>
-  <p>Generate a real, ready-to-import <b>WireGuard</b> configuration. Free, self-hosted, no accounts — R.O.D.E doesn't invent crypto, it hands you correct configs for WireGuard's audited implementation.</p></div>
+<div class="page">${pageHead({
+  title:'VPN', tag:'WireGuard generator',
+  intro:"Generate a real, ready-to-import <b>WireGuard</b> configuration. Free, self-hosted, no accounts — R.O.D.E doesn't invent crypto, it hands you correct configs for WireGuard's audited implementation.",
+  help:"A VPN routes your traffic through a <b>server you control</b>. To actually run one you need: <b>1)</b> a machine with a public address — a cheap VPS, or a home box with a forwarded port; <b>2)</b> WireGuard installed on it; <b>3)</b> the config below. If you're just learning, generate a config and read the annotations — the keys are real and generated locally in your browser session; nothing leaves your machine."
+})}
 <div class="page-body">
-  <div class="card2"><h3>How this works (read first)</h3>
-    <p class="muted">A VPN routes your traffic through a <b>server you control</b>. To actually run one you need: <b>1)</b> a machine with a public address — a cheap VPS, or a home box with a forwarded port; <b>2)</b> WireGuard installed on it; <b>3)</b> the config below. If you're just learning, generate a config and read the annotations — the keys are real and generated locally in your browser session; nothing leaves your machine.</p></div>
   <div class="card2"><h3>1 · Tunnel settings</h3>
   <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end">
     <div style="flex:2;min-width:180px"><label class="muted">Server endpoint (your public host/IP)</label><input id="ep" value="vpn.example.com" style="width:100%;margin-top:4px"/></div>

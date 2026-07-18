@@ -1,8 +1,11 @@
 // pages/credentials.js — login auditor (for your OWN systems)
-import { $, escapeHtml, toast, S } from '../core.js';
+import { $, escapeHtml, toast, S, pageHead } from '../core.js';
 function shell(){ return `
-<div class="page"><div class="page-h"><h2>Credentials <span class="tag">login auditor</span></h2>
-  <p>Test login security on systems you <b>own</b> — like your local OWASP Juice Shop. Tries a password list against a login endpoint and reports what falls. Runs locally, no accounts. Throttled and capped.</p></div>
+<div class="page">${pageHead({
+  title:'Credentials', tag:'login auditor',
+  intro:"Test login security on systems you <b>own</b> — like your local OWASP Juice Shop. Tries a password list against a login endpoint and reports what falls. Runs locally, no accounts. Throttled and capped.",
+  help:"Only test accounts and systems you own or are explicitly authorized to test. The lesson here is defensive: rate-limiting, account lockout, MFA, and slow salted password hashing are what stop this kind of attack. If a common password falls in the first few tries, that's exactly what a real attacker would find too."
+})}
 <div class="page-body"><div class="grid2">
   <div class="card2"><h3>Target</h3>
     <div style="display:flex;gap:8px;margin-bottom:8px"><button class="sm ghost" id="preset">↺ Juice Shop preset</button></div>
@@ -27,7 +30,6 @@ function shell(){ return `
   <div style="display:flex;gap:8px;margin-top:6px"><input id="pw" type="password" placeholder="password to check" style="flex:1"/><button class="sm" id="pwgo">Check</button></div>
   <div id="pwres" class="muted" style="margin-top:8px;font-size:12.5px"></div>
 </div>
-<div class="card2"><h3 style="color:var(--warnc)">Use policy</h3><p class="muted">Only test accounts and systems you own or are explicitly authorized to test. The lesson here is defensive: rate-limiting, account lockout, MFA, and slow salted password hashing are what stop this.</p></div>
 </div></div>`; }
 function mount(root){
   root.innerHTML=shell();

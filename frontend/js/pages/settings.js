@@ -1,12 +1,15 @@
 // pages/settings.js — real preferences
-import { $, API, toast } from '../core.js';
+import { $, API, toast, pageHead } from '../core.js';
 const ACCENTS=[['#4bb8d0','Teal'],['#6ea8fe','Blue'],['#a892e0','Violet'],['#5fbf8a','Green'],['#e0a24b','Amber'],['#e0686a','Red']];
 export function applySettings(){
   if(localStorage.getItem('rode.compact')==='1') document.body.classList.add('compact');
   const acc=localStorage.getItem('rode.accent'); if(acc) document.documentElement.style.setProperty('--accent',acc);
 }
 function shell(){ return `
-<div class="page"><div class="page-h"><h2>Settings</h2><p>How R.O.D.E behaves and feels. Changes apply immediately and persist on this machine.</p></div>
+<div class="page">${pageHead({
+  title:'Settings',
+  intro:'How R.O.D.E behaves and feels. Changes apply immediately and persist on this machine.'
+})}
 <div class="page-body"><div class="grid2">
   <div class="card2"><h3>Appearance</h3>
     <label class="toggle-row"><input type="checkbox" id="anim"/> Enable animations (typewriter console, node fade-in)</label>

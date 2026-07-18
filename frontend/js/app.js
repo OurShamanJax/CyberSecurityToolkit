@@ -68,6 +68,24 @@ export function sendTo(pageId, ctx){
   } else location.hash='#/'+pageId;
 }
 
+// Shared result action bar — one consistent "add to graph / send onward" surface
+// for every tool page. Returns a wired DOM element to append into a results area.
+//   opts: { add?:fn, addLabel?, sends?:[{label,page,ctx}], note? }
+export function sendToBar(opts={}){
+  const bar=document.createElement('div'); bar.className='sendbar';
+  if(opts.add){
+    const b=document.createElement('button'); b.className='sm primary'; b.textContent=opts.addLabel||'＋ Add to graph';
+    b.onclick=async()=>{ b.disabled=true; try{ await opts.add(); } finally { b.disabled=false; } };
+    bar.appendChild(b);
+  }
+  (opts.sends||[]).forEach(s=>{
+    const b=document.createElement('button'); b.className='sm ghost'; b.textContent=s.label;
+    b.onclick=()=>sendTo(s.page, s.ctx); bar.appendChild(b);
+  });
+  if(opts.note){ const n=document.createElement('span'); n.className='sendbar-note'; n.textContent=opts.note; bar.appendChild(n); }
+  return bar;
+}
+
 // ── header: investigations ───────────────────────────────
 async function loadInvestigations(sel){
   const list=await API('/investigations');

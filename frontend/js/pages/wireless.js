@@ -1,10 +1,13 @@
 // pages/wireless.js — AP discovery with per-router action menus
-import { $, escapeHtml, toast, S } from '../core.js';
+import { $, escapeHtml, toast, S, pageHead } from '../core.js';
 import { sendTo } from '../app.js';
 let connected=null;
 function shell(){ return `
-<div class="page"><div class="page-h"><h2>Wireless <span class="tag">AP scan</span></h2>
-  <p>Discover the access points your adapter can see — SSID, BSSID, signal, channel, encryption. <b>Click a network</b> for options: analyze your router, check its admin panel, or (with the right hardware) go deeper. Read-only scan uses <span class="kbd">netsh</span>/<span class="kbd">nmcli</span> — no special adapter.</p></div>
+<div class="page">${pageHead({
+  title:'Wireless', tag:'AP scan',
+  intro:'Discover the access points your adapter can see — SSID, BSSID, signal, channel, encryption. <b>Click a network</b> for options: analyze your router, check its admin panel, or (with the right hardware) go deeper. Read-only scan uses <span class="kbd">netsh</span>/<span class="kbd">nmcli</span> — no special adapter.',
+  help:"What works here on any adapter: the read-only AP scan, adding an AP to your graph, and analyzing your own router. Going deeper — WPA-handshake capture and deauth — needs a WiFi adapter with <b>monitor mode + packet injection</b> driven by Linux tools (aircrack-ng, hcxdumptool). Windows WiFi drivers can't do this. The real path is Linux (a live USB, your Pop!_OS box, or a VM with a USB adapter passed through via WSL2 + usbipd-win). Only test networks you own or are authorized to test."
+})}
 <div class="page-body">
   <div class="card2"><div style="display:flex;gap:10px;align-items:center">
     <button class="primary" id="scan"><svg class="ic" viewBox="0 0 24 24"><path d="M5 12a10 10 0 0 1 14 0M8 15a6 6 0 0 1 8 0"/><circle cx="12" cy="18.5" r="1.3"/></svg>Scan for access points</button>
