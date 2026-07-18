@@ -5,7 +5,7 @@
 // default). Free/no-account sources (ESRI imagery, ip-api.com, Celestrak).
 import { $, API, S, COLOR, escapeHtml, toast } from '../core.js';
 
-let viewer=null, baseLayer=null, labelLayer=null, hillLayer=null, camHandler=null, camDS=null, atlasKey=null;
+let viewer=null, baseLayer=null, labelLayer=null, roadLayer=null, hillLayer=null, camHandler=null, camDS=null, atlasKey=null;
 let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null, rainLayer=null;
 let firmsSaved=false, fireDS=null, fireTimer=null, _hoverSat=null, mapSaved=false;
 let svMode=false, svDS=null, svTimer=null;
@@ -76,7 +76,8 @@ function shell(){ return `
       <div id="globeOpts" style="display:none">
         <select id="base" class="sm" style="width:100%;margin-bottom:6px"><option value="satellite">Satellite imagery</option><option value="streets">Streets</option></select>
         <label class="ap-row"><input type="checkbox" id="hill"/> <span>Terrain shading (hillshade)</span></label>
-        <label class="ap-row"><input type="checkbox" id="labels" checked/> <span>Labels</span></label>
+        <label class="ap-row" title="Town/place names — fade out as you zoom in"><input type="checkbox" id="labels" checked/> <span>Place names</span></label>
+        <label class="ap-row" title="Road/street names — fade in as you zoom to street level"><input type="checkbox" id="roads" checked/> <span>Road names</span></label>
         <label class="ap-row"><input type="checkbox" id="sun" checked/> <span>Sunlight day/night</span></label>
         <label class="ap-row" title="HDR + anti-aliasing — richer light &amp; smoother edges. Turn off if the globe feels sluggish."><input type="checkbox" id="cine" checked/> <span>Cinematic quality (HDR)</span></label>
         <div class="ap-lbl" style="margin-top:9px">Living Earth</div>
@@ -158,7 +159,7 @@ function initCesium(){
     terrainProvider: new Cesium.EllipsoidTerrainProvider(),
   });
   baseLayer=viewer.imageryLayers.get(0);
-  setLabels(true);
+  setLabels(true); setRoads(true);
   const g=viewer.scene.globe; g.enableLighting=true; g.showGroundAtmosphere=true; g.maximumScreenSpaceError=1.4;
   viewer.scene.backgroundColor=Cesium.Color.fromCssColorString('#05070b');
   try{ viewer.clock.currentTime=Cesium.JulianDate.now(); viewer.clock.multiplier=1; viewer.clock.shouldAnimate=true;
@@ -230,17 +231,26 @@ function setBase(kind){
 }
 function setLabels(on){
   if(!viewer)return;
+  // place/town names — "Alternate" reference is haloed for imagery bases; fadeLabels
+  // fades this OUT at close zoom so town names don't blur over the ground.
   if(labelLayer){ viewer.imageryLayers.remove(labelLayer,true); labelLayer=null; }
-  // "Alternate" reference layer is designed for imagery bases — dark haloed text,
-  // far more legible over the satellite globe than the plain boundaries layer.
   if(on){ labelLayer=viewer.imageryLayers.addImageryProvider(esri('Reference/World_Boundaries_and_Places_Alternate'));
     labelLayer.brightness=1.35; }
+}
+function setRoads(on){
+  if(!viewer)return;
+  // road/street names — separate transportation layer; fadeLabels fades this IN at
+  // close zoom (opposite of place names). Toggled independently in Globe settings.
+  if(roadLayer){ viewer.imageryLayers.remove(roadLayer,true); roadLayer=null; }
+  if(on){ roadLayer=viewer.imageryLayers.addImageryProvider(esri('Reference/World_Transportation'));
+    roadLayer.brightness=1.25; }
 }
 function setHill(on){
   if(!viewer)return;
   if(hillLayer){ viewer.imageryLayers.remove(hillLayer,true); hillLayer=null; }
   if(on){ hillLayer=viewer.imageryLayers.addImageryProvider(esri('Elevation/World_Hillshade'));
     hillLayer.alpha=0.28;                                    // subtle relief, not a gray sheet
+    if(roadLayer) viewer.imageryLayers.raiseToTop(roadLayer);
     if(labelLayer) viewer.imageryLayers.raiseToTop(labelLayer);  // keep labels crisp on top
   }
 }
@@ -316,10 +326,12 @@ function showFire(f){ setInfo('<b>🔥 Active fire</b><div class="muted" style="
 //    frame so it keeps up with the auto-rotating globe.
 // Raster place-labels can't reflow, so magnifying them at close zoom just blurs
 // the town name over the map. Fade the label layer out as you zoom in.
-function fadeLabels(){ if(!labelLayer)return;
+function fadeLabels(){
   const h=camH();
-  let a=(h-20000)/(350000-20000); a=Math.max(0,Math.min(1,a));   // full >350km, gone <20km
-  try{ labelLayer.alpha=a; }catch(e){}
+  // place/town names: full when far (>350km), gone when close (<20km)
+  if(labelLayer){ let a=(h-20000)/(350000-20000); a=Math.max(0,Math.min(1,a)); try{ labelLayer.alpha=a; }catch(e){} }
+  // road/street names: the opposite — full when close (<120km), gone when far (>550km)
+  if(roadLayer){ let ra=(550000-h)/(550000-120000); ra=Math.max(0,Math.min(1,ra)); try{ roadLayer.alpha=ra; }catch(e){} }
 }
 let _cullLast=0, _occluder=null;
 function cullOccluded(){
@@ -921,6 +933,7 @@ function mount(root){
   $('#base').onchange=e=>setBase(e.target.value);
   $('#hill').onchange=e=>setHill(e.target.checked);
   $('#labels').onchange=e=>setLabels(e.target.checked);
+  $('#roads').onchange=e=>setRoads(e.target.checked);
   $('#sun').onchange=e=>{ if(viewer)viewer.scene.globe.enableLighting=e.target.checked; };
   $('#cine').onchange=e=>setCinematic(e.target.checked);
   $('#lyRain').onchange=e=>setRain(e.target.checked);
@@ -983,7 +996,7 @@ function unmount(){
   if(camHandler){ try{camHandler.destroy();}catch(e){} camHandler=null; }
   if(viewer){ try{viewer.destroy();}catch(e){} viewer=null; }
   cams=[]; camEntities=[]; satEntities=[]; overlayEntities=[]; traceEntities=[]; locateEntities=[];
-  importedSources=new Set(); baseLayer=labelLayer=hillLayer=rainLayer=null;
+  importedSources=new Set(); baseLayer=labelLayer=roadLayer=hillLayer=rainLayer=null;
   clearTimeout(fireTimer); fireDS=null; _compassRose=null; _occluder=null;
   clearTimeout(svTimer); svTimer=null; svMode=false; svDS=null;
   closeAllCamWindows();
