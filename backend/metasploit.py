@@ -315,62 +315,45 @@ async def run_venom(opts: dict, emit: Callable, out_dir: str | None = None) -> d
     return {"exit_code": code, "artifact": artifact}
 
 
-# ── interactive msfconsole session ─────────────────────────────────────────
-class Console:
-    """A live msfconsole process (local binary or Docker). Lines typed in the UI
-    are written to its stdin; stdout is streamed back. Real tool, real session."""
+async def run_console_cmd(command, emit) -> dict:
+    """Run ONE msfconsole command in a fresh console and stream the output.
+    Uses `msfconsole -q -x "<cmd>; exit"` so the process exits and its output is
+    flushed reliably — unlike a piped interactive session (which buffers forever
+    without a TTY). No session state carries between commands."""
+    st = status()
+    if not st["available"]:
+        await emit("[RODE] msfconsole unavailable. " + st["install_hint"] + "\n")
+        return {"exit_code": 1}
+    command = (command or "").strip()
+    if not command:
+        return {"exit_code": 1}
+    script = command + "; exit"
+    flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
+    if st["mode"] == "local":
+        argv = ["msfconsole", "-q", "-x", script]
+    else:
+        argv = ["docker", "run", "--rm", "--network", "host", DOCKER_IMAGE,
+                "./msfconsole", "-q", "-x", script]
+    await emit(f'[CMD] msfconsole -q -x "{script}"\n')
+    loop = asyncio.get_event_loop()
 
-    def __init__(self):
-        self.proc: Optional[subprocess.Popen] = None
-        self._pump = None
-
-    def start(self, loop, emit: Callable) -> bool:
-        st = status()
-        if not st["available"]:
-            asyncio.run_coroutine_threadsafe(
-                emit("[RODE] msfconsole unavailable. " + st["install_hint"] + "\n"), loop)
-            return False
-        flags = subprocess.CREATE_NO_WINDOW if os.name == "nt" else 0
-        if st["mode"] == "local":
-            argv = ["msfconsole", "-q"]
-        else:
-            # -i keeps stdin open so it's interactive; -q quiet banner.
-            # ./msfconsole because it isn't on PATH inside the official image.
-            argv = ["docker", "run", "--rm", "-i", "--network", "host",
-                    DOCKER_IMAGE, "./msfconsole", "-q"]
+    def _blk():
+        code = 1
         try:
-            self.proc = subprocess.Popen(
-                argv, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
-                stderr=subprocess.STDOUT, text=True, encoding="utf-8",
-                errors="replace", bufsize=1, shell=False, creationflags=flags)
+            proc = subprocess.Popen(argv, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                                    text=True, encoding="utf-8", errors="replace",
+                                    bufsize=1, shell=False, creationflags=flags)
+            for line in iter(proc.stdout.readline, ""):
+                asyncio.run_coroutine_threadsafe(emit(line), loop)
+            proc.wait()
+            code = proc.returncode or 0
+        except FileNotFoundError:
+            asyncio.run_coroutine_threadsafe(emit(f"[RODE ERROR] not found: {argv[0]}\n"), loop)
+            code = 127
         except Exception as e:
-            asyncio.run_coroutine_threadsafe(emit(f"[RODE ERROR] {e}\n"), loop)
-            return False
+            asyncio.run_coroutine_threadsafe(emit(f"[RODE ERROR] {type(e).__name__}: {e}\n"), loop)
+        return code
 
-        def pump():
-            try:
-                for line in iter(self.proc.stdout.readline, ""):
-                    asyncio.run_coroutine_threadsafe(emit(line), loop)
-            except Exception:
-                pass
+    code = await asyncio.to_thread(_blk)
+    return {"exit_code": code}
 
-        import threading
-        self._pump = threading.Thread(target=pump, daemon=True)
-        self._pump.start()
-        return True
-
-    def send(self, line: str):
-        if self.proc and self.proc.stdin:
-            try:
-                self.proc.stdin.write((line or "").rstrip("\n") + "\n")
-                self.proc.stdin.flush()
-            except Exception:
-                pass
-
-    def stop(self):
-        if self.proc:
-            try:
-                self.proc.kill()
-            except Exception:
-                pass
-            self.proc = None

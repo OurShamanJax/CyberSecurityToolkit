@@ -4,10 +4,9 @@
 //   • msfconsole       → a live console session (stdin/stdout over a WebSocket).
 // Authorized-lab use only. R.O.D.E doesn't invent payloads; msfvenom does the
 // work, and every build is validated server-side (allowlist + range checks).
-import { $, toast, escapeHtml } from '../core.js';
+import { $, S, toast, escapeHtml } from '../core.js';
 
-let ws=null, cat=null, statusInfo=null, tab='build', consoleOn=false, previewTimer=null;
-let bootT=null, bootStart=0, gotOut=false;
+let ws=null, cat=null, statusInfo=null, tab='build', previewTimer=null;
 
 function shell(){ return `
 <div class="page msfpage"><div class="page-h"><div class="row1">
@@ -58,17 +57,10 @@ function shell(){ return `
 
   <!-- ── msfconsole ── -->
   <div id="paneConsole" style="display:none">
-    <div class="card2"><h3>Live msfconsole</h3>
-      <p class="muted" style="margin:0 0 8px">A real msfconsole session. Try <span class="kbd">help</span>, <span class="kbd">version</span>, <span class="kbd">search type:exploit platform:linux</span>. First Docker launch is slow (it boots the framework).</p>
-      <div class="row1" style="gap:8px;margin-bottom:8px">
-        <button class="primary sm" id="conStart">Start console</button>
-        <button class="ghost sm" id="conStop" disabled>Stop</button>
-      </div>
-      <pre class="msf-term" id="term">Console not started.</pre>
-      <div class="row1" style="gap:6px;margin-top:8px">
-        <span class="prompt">msf ›</span>
-        <input id="conIn" placeholder="type a command, press Enter" style="flex:1" disabled/>
-      </div>
+    <div class="card2"><h3>msfconsole</h3>
+      <p class="muted" style="margin:0 0 8px">Run an <b>msfconsole</b> command and see its output. Each command runs in a <b>fresh console</b> (it boots the framework, ~30–60s), so there's no session state between commands — for a live interactive session, run <span class="kbd">msfconsole</span> in a terminal on your lab box. Try <span class="kbd">version</span>, <span class="kbd">search platform:linux vsftpd</span>.</p>
+      <div class="row1" style="gap:6px;margin-bottom:8px"><span class="prompt">msf ›</span><input id="conIn" placeholder="e.g. search platform:linux ssh" style="flex:1"/><button class="primary sm" id="conRun">Run</button></div>
+      <pre class="msf-term" id="term">Type a command and press Run.</pre>
     </div>
   </div>
 </div></div>`; }
@@ -123,7 +115,7 @@ function connect(onMsg){
   if(ws && ws.readyState<=1) return ws;
   ws=new WebSocket((location.protocol==='https:'?'wss':'ws')+'://'+location.host+'/ws/msf');
   ws.onmessage=e=>{ try{ onMsg(JSON.parse(e.data)); }catch(_){} };
-  ws.onclose=()=>{ if(consoleOn){ appendTerm('\n[connection closed]\n'); setConsole(false); } };
+  ws.onclose=()=>{ conBusy=false; const b=$('#conRun'); if(b)b.disabled=false; };
   return ws;
 }
 
@@ -154,25 +146,21 @@ function setTab(t){ tab=t;
   $('#tabBuild').classList.toggle('ghost',t!=='build');
   $('#tabConsole').classList.toggle('ghost',t!=='console');
 }
-function setConsole(on){ consoleOn=on;
-  $('#conStart').disabled=on; $('#conStop').disabled=!on; $('#conIn').disabled=!on;
-  if(on)$('#conIn').focus();
-}
-
-const BOOT_MSG='Booting the Metasploit framework — first run can take 30-90s, and without a TTY output may arrive in bursts.';
-function startConsole(){
-  gotOut=false; bootStart=Date.now();
-  $('#term').textContent=BOOT_MSG+'\n';
-  clearInterval(bootT);
-  bootT=setInterval(()=>{ if(!gotOut){ const sec=Math.round((Date.now()-bootStart)/1000);
-    $('#term').textContent=BOOT_MSG+'\n\n  booting… '+sec+'s'; } }, 1000);
+let conBusy=false;
+function runConsoleCmd(cmd){
+  cmd=(cmd||'').trim(); if(!cmd) return;
+  if(conBusy){ toast('A command is still running…','warn'); return; }
+  conBusy=true; const btn=$('#conRun'); if(btn)btn.disabled=true;
+  const t0=Date.now();
+  const el=$('#term'); if(el && el.textContent==='Type a command and press Run.') el.textContent='';
+  appendTerm('› '+cmd+'\n');
   const w=connect(m=>{
-    if(m.type==='output'){ if(!gotOut){ gotOut=true; clearInterval(bootT); $('#term').textContent=''; } appendTerm(m.data); }
-    else if(m.type==='console_started'){ setConsole(true); }
-    else if(m.type==='console_stopped'){ clearInterval(bootT); setConsole(false); appendTerm('\n[stopped]\n'); }
-    else if(m.type==='error'){ clearInterval(bootT); appendTerm('\n[error] '+(m.message||'')+'\n'); setConsole(false); }
+    if(m.type==='output') appendTerm(m.data);
+    else if(m.type==='console_running') appendTerm('[booting msfconsole — this can take 30–60s]\n');
+    else if(m.type==='console_done'){ conBusy=false; if(btn)btn.disabled=false; appendTerm('\n[done · '+Math.round((Date.now()-t0)/1000)+'s]\n'); const i=$('#conIn'); if(i)i.focus(); }
+    else if(m.type==='error'){ conBusy=false; if(btn)btn.disabled=false; appendTerm('\n[error] '+(m.message||'')+'\n'); }
   });
-  const go=()=>w.send(JSON.stringify({action:'console_start'}));
+  const go=()=>w.send(JSON.stringify({action:'console_exec',cmd}));
   if(w.readyState===1) go(); else w.onopen=go;
 }
 
@@ -199,9 +187,9 @@ async function mount(root){
   $('#ack').onchange=()=>gate(true);
   $('#gen').onclick=doGenerate;
   $('#copyCmd').onclick=()=>{ const t=$('#recipe').textContent; try{navigator.clipboard.writeText(t);}catch(_){} toast('Command copied'); };
-  $('#conStart').onclick=startConsole;
-  $('#conStop').onclick=()=>{ if(ws&&ws.readyState===1) ws.send(JSON.stringify({action:'console_stop'})); };
-  $('#conIn').onkeydown=e=>{ if(e.key==='Enter'){ const v=e.target.value; appendTerm('› '+v+'\n'); if(ws&&ws.readyState===1) ws.send(JSON.stringify({action:'console_input',line:v})); e.target.value=''; } };
+  $('#conRun').onclick=()=>{ runConsoleCmd($('#conIn').value); $('#conIn').value=''; };
+  $('#conIn').onkeydown=e=>{ if(e.key==='Enter'){ runConsoleCmd(e.target.value); e.target.value=''; } };
+  if(S.ctx&&S.ctx.msfSearch){ setTab('console'); const ci=$('#conIn'); if(ci)ci.value='search '+S.ctx.msfSearch; S.ctx.msfSearch=null; toast('Loaded into msfconsole — press Run'); }
 }
 
 function renderStatus(s){
@@ -220,5 +208,5 @@ function renderStatus(s){
   }
 }
 
-function unmount(){ clearInterval(bootT); try{ if(ws){ ws.close(); ws=null; } }catch(e){} consoleOn=false; }
+function unmount(){ try{ if(ws){ ws.close(); ws=null; } }catch(e){} }
 export default { id:'payloads', label:'Payloads', short:'Payloads', mount, unmount };

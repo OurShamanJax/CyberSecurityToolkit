@@ -388,6 +388,13 @@ def api_myip():
     return {"ip": my_ip()}
 
 
+@app.get("/api/lan/hosts")
+def api_lan_hosts():
+    """The last LAN-discovery result (for labelling IPs in Live Traffic, etc.)."""
+    from .. import lan
+    return lan.get_hosts()
+
+
 @app.get("/api/lanip")
 def api_lanip():
     """The machine's primary LAN IP - used to pre-fill the payload listener (LHOST)
@@ -630,9 +637,7 @@ async def ws_capture(ws: WebSocket):
 async def ws_msf(ws: WebSocket):
     """One socket for the Metasploit page. Actions:
       {action:'build', ...opts}  -> stream msfvenom output (+ optional artifact)
-      {action:'console_start'}   -> launch a live msfconsole
-      {action:'console_input', line}
-      {action:'console_stop'}
+      {action:'console_exec', cmd} -> run one msfconsole command, stream output
     Runs only real upstream tools; refuses a build that fails validation."""
     import asyncio
     if not _ws_origin_ok(ws):
@@ -641,7 +646,6 @@ async def ws_msf(ws: WebSocket):
     await ws.accept()
     from .. import metasploit
     loop = asyncio.get_event_loop()
-    console = metasploit.Console()
 
     async def emit(text):
         try:
@@ -673,27 +677,20 @@ async def ws_msf(ws: WebSocket):
                 await ws.send_json({"type": "done", "exit_code": res["exit_code"],
                                     "artifact": res.get("artifact")})
 
-            elif act == "console_start":
-                await ws.send_json({"type": "console_starting"})
-                ok = await asyncio.to_thread(console.start, loop, emit)
-                await ws.send_json({"type": "console_started" if ok else "error",
-                                    "message": "" if ok else "could not start msfconsole"})
-
-            elif act == "console_input":
-                console.send(msg.get("line", ""))
-
-            elif act == "console_stop":
-                console.stop()
-                await ws.send_json({"type": "console_stopped"})
+            elif act == "console_exec":
+                cmd = (msg.get("cmd") or "").strip()
+                if cmd:
+                    await ws.send_json({"type": "console_running"})
+                    await metasploit.run_console_cmd(cmd, emit)
+                    await ws.send_json({"type": "console_done"})
     except WebSocketDisconnect:
-        console.stop()
+        pass
     except Exception as e:
         log.exception("msf ws error")
         try:
             await ws.send_json({"type": "error", "message": str(e)})
         except Exception:
             pass
-        console.stop()
 
 
 # ---- static frontend (multi-page app shell) -------------------------------

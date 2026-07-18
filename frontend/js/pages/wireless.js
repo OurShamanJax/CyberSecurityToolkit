@@ -12,7 +12,10 @@ function shell(){ return `
     <div class="spacer"></div><span class="muted" id="scanmeta"></span>
   </div></div>
   <div id="aps"></div>
-  <div class="card2"><h3 style="color:var(--warnc)">Going deeper needs hardware</h3><p class="muted">Packet capture, deauth, and WPA-handshake work need a WiFi adapter with <b>monitor mode + injection</b>, usually on Linux (or a Linux VM with USB passthrough). This read-only scan works on any adapter. Only test networks you own or are authorized to test.</p></div>
+  <div class="card2" id="deepcard"><h3 style="color:var(--warnc)">Going deeper needs hardware — and Linux</h3>
+    <p class="muted">WPA-handshake capture and deauth need a WiFi adapter that supports <b>monitor mode + packet injection</b>, driven by Linux tools (aircrack-ng, hcxdumptool). <b>Windows WiFi drivers can't do this</b> — Npcap has no monitor mode on typical adapters, so those two actions are impossible here no matter what you install.</p>
+    <p class="muted" style="margin-top:8px"><b>The real path:</b> run on Linux — a live USB, a Linux box (your Pop!_OS is perfect), or a Linux VM. On Windows you can pass a USB WiFi adapter into a VM, or use <span class="kbd">WSL2 + usbipd-win</span>. Adapters known to support monitor mode: <b>Atheros AR9271</b>, <b>Realtek RTL8812AU</b>, <b>MediaTek MT7612U</b>. Only test networks you own or are authorized to test.</p>
+    <p class="muted" style="margin-top:8px">What <b>does</b> work here on any adapter: the read-only AP scan above, adding an AP to your graph, and analyzing your own router.</p></div>
 </div></div>`; }
 function mount(root){ root.innerHTML=shell(); $('#scan').onclick=scan; $('#router').onclick=analyzeRouter; document.addEventListener('click', closePop); }
 function unmount(){ document.removeEventListener('click', closePop); closePop(); }
@@ -54,9 +57,10 @@ function menu(ap, el){
   mk('➕  Add to graph', ()=>{ if(!S.inv){ toast('Create an investigation first','warn'); return; }
     fetch('/api/entities/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({investigation_id:S.inv,type:'access_point',value:ap.bssid||ap.ssid||'ap',label:ap.ssid||'(hidden)',metadata:{signal:ap.signal,channel:ap.channel,auth:ap.auth,source:'wifi'}})}).then(()=>toast('AP added to graph','ok')); });
   mk('📋  Copy BSSID', ()=>{ navigator.clipboard&&navigator.clipboard.writeText(ap.bssid||''); toast('BSSID copied'); });
-  const dv=document.createElement('div'); dv.className='divider'; dv.textContent='Deeper (needs monitor-mode adapter)'; p.appendChild(dv);
-  mk('📡  Capture WPA handshake', ()=>toast('Needs a monitor-mode WiFi adapter on Linux — see the note below','warn'));
-  mk('⚡  Deauth test (own network)', ()=>toast('Needs a monitor-mode/injection adapter — gated for authorized own-network testing','warn'));
+  const dv=document.createElement('div'); dv.className='divider'; dv.textContent='⛔ Needs Linux + a monitor-mode adapter'; p.appendChild(dv);
+  const lk=(label)=>{ const b=document.createElement('button'); b.className='locked'; b.innerHTML='🔒 '+label; b.title='Not possible on Windows WiFi'; b.onclick=()=>{ closePop(); toast("Can't be done on Windows WiFi — needs Linux + a monitor-mode/injection adapter.",'warn'); const c=$('#deepcard'); if(c){ c.scrollIntoView({behavior:'smooth',block:'center'}); c.classList.add('flash'); setTimeout(()=>c.classList.remove('flash'),1400); } }; p.appendChild(b); };
+  lk('Capture WPA handshake');
+  lk('Deauth test (own network)');
   document.body.appendChild(p);
   const r=el.getBoundingClientRect();
   p.style.left=Math.min(r.left+40, window.innerWidth-p.offsetWidth-12)+'px';

@@ -295,3 +295,17 @@
     why:  "When recon finds 'Apache 2.4.49' or a CVE, this shows which public exploits already exist for it."
     next: "Open the exploit page to study it. Only test systems you own or are authorized to test."
     warn: "For authorized testing only. These are references to public exploits, not attacks by themselves."
+
+- id: lan_discover
+  name: LAN Discovery
+  category: recon
+  input_type: host
+  noise: moderate
+  parser: lan
+  exec:
+    python: { handler: "lan_discover" }
+  teach:
+    what: "Finds live hosts on YOUR OWN local network (ping sweep + ARP), with hostnames and MACs."
+    why:  "Turns an empty investigation into a map of your LAN in one run — every device becomes a node wired to the gateway."
+    next: "Click a host to inspect it, then run Nmap or Exposure against the ones you care about."
+    warn: "Scans only your local private /24 (auto-detected). Only scan networks you own or are authorized to test. Type 'auto' or your gateway IP as the target."

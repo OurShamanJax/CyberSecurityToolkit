@@ -1,13 +1,41 @@
 // pages/traffic.js — Live Traffic Monitor. Real tshark capture when available,
 // clearly-labelled simulated feed otherwise. Play/pause/speed control the DISPLAY
 // (buffer + drain), which works for both real and simulated sources.
-import { $, toast, S } from '../core.js';
+import { $, toast, S, escapeHtml } from '../core.js';
 let ws=null, mode='sim', playing=false, speed=1, seq=0, rows=[], buffer=[], sel=null, ifaces=[];
 let drainTimer=null, simTimer=null, capStarted=false;
+let lanMap={}, selfIp='', gatewayIp='';
 const HOSTS=['192.168.1.14','192.168.1.1','10.0.0.5','93.184.216.34','142.250.72.14','127.0.0.1'];
 const PROTO=['TCP','UDP','TLS','HTTP','DNS','ARP'];
 const ALERTS=[{k:'Port scan',why:'many SYNs to sequential ports from one host'},{k:'ARP spoofing',why:'gateway IP now maps to a new MAC'},{k:'DNS tunneling',why:'long, high-entropy subdomain lookups'}];
 const rnd=a=>a[Math.floor(Math.random()*a.length)];
+const PROTONAMES={MDNS:'device discovery (mDNS/Bonjour)',ARP:'finding a device (ARP)',DNS:'name lookup (DNS)',LLMNR:'name lookup (LLMNR)',NBNS:'name lookup (NetBIOS)',TLS:'encrypted web (HTTPS/TLS)',HTTP:'web page (HTTP)',QUIC:'encrypted web (QUIC)',SSDP:'device discovery (UPnP)',DHCP:'getting an IP (DHCP)',DHCPV6:'getting an IP (DHCPv6)',ICMP:'ping / network test',ICMPV6:'IPv6 signalling',IGMP:'multicast group join',NTP:'clock sync (NTP)',TCP:'connection (TCP)',UDP:'datagram (UDP)',SSH:'secure shell (SSH)',STUN:'NAT traversal (STUN)',TFTP:'file transfer (TFTP)'};
+const GLOSS={MDNS:'Devices announcing and looking up each other by name on your LAN — normal constant background chatter.',ARP:'A device asking "who has this IP?" to locate another device on the LAN.',DNS:'Turning a website name into an IP address.',SSDP:'A device advertising itself (casting, printers) via UPnP.',TLS:'Encrypted web traffic — you can see who is talking, not what they say.',DHCP:'A device asking the router for an IP address to join the network.',NTP:'A device syncing its clock.'};
+function protoInfo(p){ const k=(p||'').split(' ')[0].toUpperCase(); return PROTONAMES[p]||PROTONAMES[k]||(p||'traffic'); }
+function annIP(ip){
+  if(!ip) return {ip:'?',tag:'',cls:''};
+  if(ip.indexOf(':')>=0){ const l=ip.toLowerCase();
+    if(l.startsWith('ff0')) return {ip,tag:'IPv6 multicast',cls:'m'};
+    if(l.startsWith('fe80')) return {ip,tag:'local IPv6',cls:'l'};
+    if(l==='::1') return {ip,tag:'this PC',cls:'self'};
+    return {ip,tag:'IPv6',cls:''}; }
+  const o=ip.split('.').map(Number);
+  if(ip===selfIp||ip==='127.0.0.1') return {ip,tag:'this PC',cls:'self'};
+  if(gatewayIp&&ip===gatewayIp) return {ip,tag:'your router',cls:'gw'};
+  const h=lanMap[ip];
+  if(h){ const nm=h.hostname||(h.vendor&&!/randomized/.test(h.vendor)?h.vendor:''); return {ip,tag:nm?('your '+nm):'your device',cls:'dev'}; }
+  if(o[0]>=224&&o[0]<=239) return {ip,tag: ip==='224.0.0.251'?'mDNS multicast':(ip==='239.255.255.250'?'UPnP/SSDP':'multicast'),cls:'m'};
+  if(ip==='255.255.255.255'||o[3]===255) return {ip,tag:'broadcast',cls:'b'};
+  if(o[0]===10||(o[0]===192&&o[1]===168)||(o[0]===172&&o[1]>=16&&o[1]<=31)) return {ip,tag:'local device',cls:'l'};
+  return {ip,tag:'internet',cls:'net'};
+}
+async function loadLan(){
+  try{ const d=await (await fetch('/api/lan/hosts')).json();
+    (d.hosts||[]).forEach(h=>{ if(h.ip) lanMap[h.ip]={hostname:h.hostname,vendor:h.vendor,role:h.role}; });
+    if(d.gateway)gatewayIp=d.gateway; if(d.self)selfIp=d.self; }catch(e){}
+  try{ const l=await (await fetch('/api/lanip')).json(); if(l&&l.ip)selfIp=l.ip; }catch(e){}
+  renderFeed();
+}
 
 function shell(){ return `
 <div class="page"><div class="page-h"><h2>Live Traffic <span class="tag" id="modetag">…</span></h2>
@@ -43,7 +71,9 @@ function pushRow(r){ rows.push(r); if(rows.length>500)rows.shift(); renderFeed()
 function renderFeed(){ const feed=$('#feed'); if(!feed)return;
   const f=(($('#filt')&&$('#filt').value)||'').toLowerCase();
   const vis=rows.filter(r=>!f||[r.src,r.dst,r.proto,r.summary].join(' ').toLowerCase().includes(f));
-  feed.innerHTML=vis.slice(-220).map(r=>`<div class="tf-row${r.alert?' alert':''}${sel===r.id?' sel':''}" data-id="${r.id}"><span class="t">${r.t}</span><span><span class="p">${r.proto}</span> ${r.src||'?'} → ${r.dst||'?'}</span><span>${r.len}B</span><span>#${r.id}</span></div>`).join('');
+  feed.innerHTML=vis.slice(-220).map(r=>{ const s=annIP(r.src),d=annIP(r.dst);
+    const end=a=>`${a.ip}${a.tag?` <em class="iptag ${a.cls}">${a.tag}</em>`:''}`;
+    return `<div class="tf-row${r.alert?' alert':''}${sel===r.id?' sel':''}" data-id="${r.id}"><span class="t">${r.t}</span><span class="mid"><span class="p" title="${protoInfo(r.proto)}">${r.proto||'?'}</span> ${end(s)} <span class="arr">→</span> ${end(d)}</span><span>${r.len}B</span><span>#${r.id}</span></div>`; }).join('');
   feed.scrollTop=feed.scrollHeight;
   feed.querySelectorAll('.tf-row').forEach(el=>el.onclick=()=>select(el.dataset.id)); }
 function renderAlert(r){ const a=$('#alerts'); if(!a)return; if(a.querySelector('.muted'))a.innerHTML='';
@@ -54,7 +84,11 @@ function renderAlert(r){ const a=$('#alerts'); if(!a)return; if(a.querySelector(
 function addAlert(r){ if(!S.inv){ toast('Create an investigation first','warn'); return; }
   fetch('/api/entities/add',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({investigation_id:S.inv,type:'alert',value:r.alert.k+' #'+r.id,label:r.alert.k,metadata:{severity:'medium',why:r.alert.why,src:r.src,source:'traffic'},link_type:'ip',link_value:r.src||''})}).then(()=>toast('Alert added to graph','ok')); }
 function select(id){ sel=id; const r=rows.find(x=>String(x.id)===String(id)); if(!r)return; renderFeed();
-  $('#detail').innerHTML=`<b>Frame #${r.id}</b> · ${r.t} · ${r.len} bytes<br>IPv4 ${r.src||'?'} → ${r.dst||'?'}<br>${r.proto}<br>${r.info?('<span class="muted">'+r.info+'</span><br>'):''}${r.alert?`<span style="color:#eaa0a1">⚠ ${r.alert.k}: ${r.alert.why}</span>`:''}`; }
+  const s=annIP(r.src),d=annIP(r.dst),p=protoInfo(r.proto),k=(r.proto||'').split(' ')[0].toUpperCase();
+  const from=s.tag||r.src||'?', to=d.tag||r.dst||'?', gl=GLOSS[k]?(' '+GLOSS[k]):'';
+  $('#detail').innerHTML=`<div style="font-size:13px;line-height:1.55;margin-bottom:9px"><b>${from}</b> → <b>${to}</b><br><span style="color:var(--accent)">${p}</span>.${gl}</div>`+
+    `<div class="muted" style="font-size:11.5px;line-height:1.6">frame #${r.id} · ${r.t} · ${r.len} bytes<br>${r.src||'?'} → ${r.dst||'?'}<br>${escapeHtml(r.info||r.proto||'')}</div>`+
+    (r.alert?`<div style="color:#eaa0a1;margin-top:8px">⚠ ${escapeHtml(r.alert.k)}: ${escapeHtml(r.alert.why)}</div>`:''); }
 
 // ── display control (works for real + simulated) ──
 function startDrain(){ clearInterval(drainTimer); drainTimer=null; if(!playing)return;
@@ -72,6 +106,7 @@ function mount(root){
   root.innerHTML=shell(); rows=[]; buffer=[]; sel=null; seq=0; mode='sim'; playing=false; capStarted=false;
   if(S.ctx&&S.ctx.target){ $('#filt').value=String(S.ctx.target).replace(/^\w+:\/\//,'').split('/')[0]; S.ctx.target=null; }
   $('#filt').oninput=renderFeed;
+  loadLan();
   $('#play').onclick=()=>setPlaying(!playing);
   $('#step').onclick=()=>{ if(buffer.length)pushRow(buffer.shift()); else if(mode==='sim')pushRow(makeSim()); };
   $('#reset').onclick=()=>{ playing=false; $('#playlbl').textContent='Play'; clearInterval(simTimer); clearInterval(drainTimer);

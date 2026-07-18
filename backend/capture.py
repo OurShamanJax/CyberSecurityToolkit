@@ -8,7 +8,8 @@ import os, re, glob, shutil, subprocess, math
 from collections import Counter
 
 FIELDS = ["frame.number", "frame.time_relative", "ip.src", "ip.dst",
-          "_ws.col.Protocol", "frame.len", "tcp.dstport", "dns.qry.name", "_ws.col.Info"]
+          "_ws.col.Protocol", "frame.len", "tcp.dstport", "dns.qry.name", "_ws.col.Info",
+          "_ws.col.Source", "_ws.col.Destination"]
 
 
 def tshark_path():
@@ -78,8 +79,10 @@ def parse_line(line: str):
     d = dict(zip(FIELDS, parts))
     if not (d["ip.src"] or d["ip.dst"] or d["_ws.col.Protocol"]):
         return None
+    src = d["ip.src"] or d.get("_ws.col.Source", "")
+    dst = d["ip.dst"] or d.get("_ws.col.Destination", "")
     return {"num": d["frame.number"], "t": d["frame.time_relative"][:8],
-            "src": d["ip.src"], "dst": d["ip.dst"], "proto": d["_ws.col.Protocol"],
+            "src": src, "dst": dst, "proto": d["_ws.col.Protocol"],
             "len": d["frame.len"], "dstport": d["tcp.dstport"], "dns": d["dns.qry.name"],
             "info": d["_ws.col.Info"][:90]}
 

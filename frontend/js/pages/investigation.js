@@ -24,6 +24,8 @@ const HTML=`
       <svg class="ge-ic" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="M7.7 7.4 10.4 15M16.6 8.6 13.3 15.4"/></svg>
       <div class="h">No entities yet</div>
       <div class="sub">Pick a tool below and run it. Click any node for actions · select one and press <b>Delete</b> to remove it.</div>
+      <button class="primary" id="lanBtn" style="margin-top:14px;pointer-events:auto"><svg class="ic" viewBox="0 0 24 24" style="width:15px;height:15px"><path d="M5 12a10 10 0 0 1 14 0M8 15a6 6 0 0 1 8 0"/><circle cx="12" cy="18.5" r="1.2"/></svg> Discover my LAN</button>
+      <div class="sub" style="margin-top:6px;opacity:.7">maps every device on your local network into the graph</div>
     </div>
     <div class="runbar">
       <select id="toolSel" style="min-width:190px" aria-label="Tool"></select>
@@ -52,6 +54,7 @@ function mount(root){
   term=makeTyper($('#term'));
   fillTools(); updateNoiseTag();
   $('#runBtn').onclick=()=>{ const t=$('#toolSel').value, tg=$('#targetInput').value.trim(); if(tg)doRun(t,tg); };
+  $('#lanBtn').onclick=()=>{ if(!S.inv){ toast('Create an investigation first','warn'); show('#invOverlay'); return; } doRun('lan_discover','auto'); };
   $('#targetInput').addEventListener('keydown',e=>{ if(e.key==='Enter'){const t=$('#toolSel').value,tg=$('#targetInput').value.trim(); if(tg)doRun(t,tg);} });
   $('#toolSel').onchange=updateNoiseTag;
   $('#cancelBtn').onclick=()=>cancelRun();
@@ -258,6 +261,23 @@ async function nodeMenu(node){
   if(tools.length){ const dv=document.createElement('div'); dv.className='ins-run-t'; dv.textContent='Run next on this'; p.appendChild(dv);
     const rr=document.createElement('div'); rr.className='ins-run';
     tools.forEach(t=>{ const b=document.createElement('button'); b.className='ins-tool'; b.innerHTML=`<span class="dot" style="background:${NM[t.noise].c}"></span>${t.name}`; b.onclick=()=>doRun(t.id,String(d.value)); rr.appendChild(b); }); p.appendChild(rr); }
+  // ── exploit path: turn a finding into the concrete next step ──
+  const _cve=(meta.cve||'').trim(), _val=String(d.value);
+  if(d.type==='exploit'){
+    const dv=document.createElement('div'); dv.className='ins-run-t'; dv.style.color='var(--exploit)'; dv.textContent='Exploit path'; p.appendChild(dv);
+    const rr=document.createElement('div'); rr.className='ins-run';
+    if(meta.url){ const a=document.createElement('button'); a.className='ins-tool'; a.textContent='↗ Open on Exploit-DB'; a.onclick=()=>{ try{ window.open(meta.url,'_blank','noopener'); }catch(e){} }; rr.appendChild(a); }
+    const b=document.createElement('button'); b.className='ins-tool'; b.textContent='→ Use in Metasploit';
+    b.onclick=()=>{ closePop(); const q=_cve?('cve:'+_cve):(meta.id?('edb-id:'+meta.id):_val); sendTo('exploit',{msfSearch:q}); };
+    rr.appendChild(b); p.appendChild(rr);
+  } else if(['vulnerability','service','technology','software'].includes(d.type) || _cve){
+    const dv=document.createElement('div'); dv.className='ins-run-t'; dv.style.color='var(--exploit)'; dv.textContent='Exploit path'; p.appendChild(dv);
+    const rr=document.createElement('div'); rr.className='ins-run';
+    const b=document.createElement('button'); b.className='ins-tool'; b.style.borderColor='var(--exploit)'; b.style.color='var(--exploit)';
+    b.innerHTML='⚡ Find exploits for this'; b.title='Search Exploit-DB for public exploits matching this';
+    b.onclick=()=>doRun('exploit_search', _cve||_val);
+    rr.appendChild(b); p.appendChild(rr);
+  }
   const st=[], ty=d.type, val=String(d.value);
   if(['url','domain','host','ip'].includes(ty)){ st.push(['Audit login (Credentials)',()=>sendTo('credentials',{target:val})]); st.push(['Watch (Live Traffic)',()=>sendTo('traffic',{target:val})]); }
   if(ty==='file'){ st.push(['Analyze (Analyzer)',()=>sendTo('analyzer',{target:val})]); }

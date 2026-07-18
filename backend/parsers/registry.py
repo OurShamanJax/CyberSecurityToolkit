@@ -13,6 +13,7 @@ from .binary import BinaryParser
 from .trivy import TrivyParser
 from .sqlmap import SqlmapParser
 from .exploit import ExploitParser
+from .lan import LanParser
 
 _PARSERS: dict[str, BaseParser] = {
     "nmap": NmapParser(),
@@ -27,6 +28,7 @@ _PARSERS: dict[str, BaseParser] = {
     "trivy": TrivyParser(),
     "sqlmap": SqlmapParser(),
     "exploit": ExploitParser(),
+    "lan": LanParser(),
     "generic": GenericParser(),
 }
 

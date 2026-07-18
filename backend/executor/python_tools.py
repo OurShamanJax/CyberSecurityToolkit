@@ -26,6 +26,7 @@ async def run_python_tool(handler: str, target: str, cb) -> dict:
         "hash_identifier": hash_identifier,
         "binary_inspector": binary_inspector,
         "exploit_search": exploit_search,
+        "lan_discover": lan_discover,
     }
     fn = handlers.get(handler)
     if not fn:
@@ -305,3 +306,24 @@ async def exploit_search(target, cb) -> dict:
         await emit("No public exploits indexed for that term. Try the exact product + version, or a CVE id.\n")
     await emit("\n[RODE] References to PUBLIC exploits (Exploit-DB). Only use against systems you own or are authorized to test.\n")
     return {"raw": "".join(out), "exit_code": 0}
+
+
+
+async def lan_discover(target, cb) -> dict:
+    """Sweep the local /24 for live hosts and stream them as [HOST] lines."""
+    import asyncio
+    from .. import lan
+    loop = asyncio.get_event_loop()
+    parts = []
+
+    def sink(text):
+        parts.append(text)
+        try:
+            asyncio.run_coroutine_threadsafe(cb(text), loop)
+        except Exception:
+            pass
+
+    hint = (target or "").strip()
+    hint = None if hint.lower() in ("", "auto", "lan", "local") else hint
+    await asyncio.to_thread(lan.discover, sink, hint)
+    return {"raw": "".join(parts), "exit_code": 0}

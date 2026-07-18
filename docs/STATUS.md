@@ -23,26 +23,41 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - **Map lens** — Graph/Map toggle; investigation entities plotted on a Cesium globe; click a
   pin → jump to its graph node. (Phase A, step 1 of the unify.)
 - Tools feed the graph; growing plain-English **Report**.
+- **Exploit paths** — a vuln/service/tech node offers **Find exploits for this**; an exploit
+  node offers **Open on Exploit-DB** + **Use in Metasploit** (hands `search cve:…` into
+  msfconsole). Recon → exploit is one click.
+- **Discover my LAN** button in the empty state maps every device on your network into the graph.
 
 ### Tools / pages
 - **Exposure** — Shodan InternetDB per-IP lookup (open ports / products / CVEs), "My IP",
   add-to-graph. Free, no account.
-- **Wireless** — read-only AP scan (netsh/nmcli), clickable AP actions, router → Nmap.
-- **Atlas** — CesiumJS globe: ESRI satellite imagery w/ zoom LOD, day-night sun, borders +
-  labels, **real orbiting satellites** (Celestrak TLE + satellite.js) with live alt/speed,
-  a **simulated satellite viewpoint** (follows the satellite, zoom, playback speed),
-  **public camera feeds** (London TfL + New York DOT) with real **MP4 video** + **HLS**.
+- **Wireless** — read-only AP scan (netsh/nmcli), clickable AP actions, router → Nmap. Deauth /
+  WPA-handshake are **clearly locked** (impossible on Windows WiFi) with the concrete Linux +
+  monitor-mode-adapter path spelled out.
+- **Atlas (v2 — geo lens)** — a CesiumJS globe aimed at YOUR data: **locate** any IP/domain,
+  **traceroute-to-globe** (each hop GeoIP'd, drawn as an arc), and the **investigation
+  overlay** (geolocated hosts + relationship arcs). Left tools/layers panel, Home + Clear,
+  persistent layers. **Worldwide cameras** via Windy (optional free key, stored server-side in
+  gitignored `data/`) + Caltrans/NYC/London no-key feeds, with **marker clustering**.
+  Cameras/satellites are optional layers (off by default); real satellites + simulated
+  viewpoint retained; no-key **hillshade** relief.
 - **Credentials** — login auditor (JSON/form) + bundled wordlist; cracked creds → graph.
-- **Live Traffic** — real **tshark** capture + heuristic alerts (port scan / DNS anomaly);
-  simulated fallback; **buffer+drain display control** (play/pause/speed in both modes).
+- **Live Traffic** — real **tshark** capture + heuristic alerts; simulated fallback;
+  buffer+drain play/pause/speed. **Humanized display**: IPs annotated (this PC / your router /
+  your <vendor> device / multicast / broadcast / internet), plain-English protocol names, and
+  a per-packet explanation. IPv6/ARP src/dst now resolve.
 - **VPN** — real **WireGuard** config generator (X25519 keys) + guided deploy.
 - **Analyzer** — running-app / directory / file analysis (binary inspector + Trivy),
   expand-to-detail view.
+- **LAN Discovery** — ping-sweep + ARP the local /24 into the graph (private-subnet-only),
+  reverse-DNS, **MAC-vendor (OUI)** lookup, randomized-MAC detection, broadcast/multicast
+  filtered. Results cached so Live Traffic can label devices.
 - **Exploits** — two-level (beginner/advanced) education on exploitation, Metasploit,
   payloads, and severity/loudness reasoning.
 - **Payloads (Metasploit workbench)** — thin wrapper over the real upstream tools:
   a **Payload Builder** that composes + runs an **msfvenom** command (Docker or local),
-  showing the exact recipe, and a live **msfconsole** session over a WebSocket. Every
+  showing the exact recipe, and an **msfconsole** command-runner (each command runs in a fresh
+  `-x` console so output flushes reliably — no TTY-buffering hang). Every
   build is validated server-side (payload/format/encoder allowlists, port + iteration
   ranges, public-LHOST warning), argv-only (no shell), authorized-lab-gated. No
   hand-authored exploit/malware — msfvenom does the work.
@@ -63,9 +78,8 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - [ ] Home **dashboard** (command-center screen).
 
 ### Exploit focus (per the new direction)
-- [ ] **searchsploit / Exploit-DB** integration — map a detected product+version to known
-      public exploits, right on the vuln node. (The "exploitation database" ask, done the
-      FOSS way.) `[WRAP]`
+- [x] **Exploit-DB + exploit paths** — Find-exploits from any vuln/service node, exploit nodes
+      on the graph, one-click hand-off into msfconsole. `[WRAP]` — done.
 - [x] **Metasploit (msfconsole)** Dockerized + in-app terminal, and **msfvenom Payload
       Builder**, for authorized lab use. `[WRAP]` — done (Payloads page).
 - [ ] **Two-level explanations** everywhere (beginner + advanced), including the Report.
@@ -77,7 +91,7 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - [ ] **OWASP ZAP** baseline scan. `[WRAP]`
 - [ ] **Lynis** host audit. `[WRAP]`
 - [ ] **Suricata/Zeek** behind Live Traffic. `[WRAP]`
-- [ ] **LAN auto-discovery** → map lens. `[WRAP]`
+- [x] **LAN discovery** → graph (tool + one-click button, OUI vendors). `[WRAP]` — done.
 - [ ] gowitness **screenshots on nodes**; **live threat map**. `[WRAP]/[FUN]`
 
 ### Quality of life

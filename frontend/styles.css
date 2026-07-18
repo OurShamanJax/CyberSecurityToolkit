@@ -114,6 +114,7 @@ header{display:flex;align-items:center;gap:var(--s3);padding:8px var(--s4);borde
 .gempty{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--s3);color:var(--dim);text-align:center;padding:var(--s5);pointer-events:none}
 .gempty .ge-ic{width:44px;height:44px;stroke:var(--line2);fill:none;stroke-width:1.4}
 .gempty .h{font-size:var(--t-lg);color:var(--mut)}.gempty .sub{max-width:340px;line-height:1.55;font-size:13px}
+.gempty button{pointer-events:auto}
 .gtip{position:fixed;display:none;z-index:80;background:var(--raise);border:1px solid var(--line2);color:var(--text);font-size:var(--t-sm);font-family:var(--mono);padding:5px 9px;border-radius:7px;max-width:440px;word-break:break-all;pointer-events:none;box-shadow:0 8px 24px rgba(0,0,0,.5)}
 .spinner{position:absolute;left:50%;bottom:var(--s4);transform:translateX(-50%);width:26px;height:26px;border-radius:50%;border:3px solid #fff;background:#0c0f14;display:none;z-index:8;box-shadow:0 4px 14px rgba(0,0,0,.5)}
 .spinner.run{display:block;border-top-color:transparent;animation:spin .8s linear infinite}
@@ -361,3 +362,21 @@ body.compact .page-body{padding:14px}
 .tr-n{color:var(--dim);flex:0 0 24px}
 .tr-ip{flex:0 0 auto;color:var(--text)}
 .tr-loc{flex:1;color:var(--mut);text-align:right;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+
+/* ── Live Traffic: humanized IP annotations ── */
+.tf-row .mid{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tf-row .arr{color:var(--dim)}
+.tf-row .iptag{font-style:normal;font-size:10px;padding:0 5px;border-radius:4px;background:var(--surface2);color:var(--dim);margin-left:2px;vertical-align:middle}
+.tf-row .iptag.self{background:rgba(75,184,208,.16);color:var(--accent)}
+.tf-row .iptag.gw{background:rgba(217,164,65,.16);color:var(--warnc)}
+.tf-row .iptag.dev{background:rgba(95,191,138,.14);color:var(--ok)}
+.tf-row .iptag.net{background:rgba(224,104,106,.14);color:#eaa0a1}
+.tf-row .iptag.m,.tf-row .iptag.b,.tf-row .iptag.l{background:rgba(168,146,224,.14);color:#c3b4ec}
+
+
+/* ── Wireless: hardware-locked actions ── */
+.pop button.locked{opacity:.5;color:var(--dim)}
+.pop button.locked:hover{background:transparent;border-color:transparent}
+.card2.flash{animation:cardflash 1.4s ease}
+@keyframes cardflash{0%,100%{box-shadow:none}30%{box-shadow:0 0 0 2px var(--warnc)}}
