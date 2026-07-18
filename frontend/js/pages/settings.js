@@ -29,7 +29,36 @@ function shell(){ return `
   </div>
   <div class="card2"><h3>Scope policy</h3><p class="muted">v4 scope is <b>advisory</b> — nothing is blocked; off-scope targets get a one-time heads-up. Only test what you own or are authorized to test.</p></div>
   <div class="card2"><h3>About</h3><p class="muted">R.O.D.E v4 — a free/open-source security multitool. Everything runs locally or in Docker. No accounts, no API keys, no cloud.</p></div>
-</div></div></div>`; }
+</div>
+<div class="card2 credits">
+  <h3>Credits &amp; attributions</h3>
+  <p class="muted">R.O.D.E stands on a lot of other people's work, and this page keeps that honest.</p>
+
+  <div class="cr-sec"><div class="cr-h">Design &amp; direction</div>
+    <p><b>Shaman</b> — conceived R.O.D.E, defined the R·O·D·E pillars, and chose every feature, its scope, and its ethics. The toolkit design and all product decisions are Shaman's.</p></div>
+
+  <div class="cr-sec"><div class="cr-h">Engineering</div>
+    <p>Built collaboratively with <b>Claude</b> (Anthropic's AI) acting as a pair-programmer under Shaman's direction. The application code — FastAPI backend, modular frontend, the Cesium globe, the tool wrappers, this page — was written with Claude's assistance; the direction, review, and final calls are Shaman's. R.O.D.E does not hand-author exploit or malware code.</p></div>
+
+  <div class="cr-sec"><div class="cr-h">Security tools it wraps</div>
+    <p class="muted">R.O.D.E orchestrates these established projects — it doesn't reimplement them. All credit and licenses belong to their authors:</p>
+    <ul class="cr-list">
+      <li><b>Nmap</b> — Gordon Lyon</li>
+      <li><b>Metasploit Framework</b> &amp; <b>Exploit-DB / searchsploit</b> — Rapid7 / OffSec</li>
+      <li><b>Wireshark / tshark</b> — the Wireshark Foundation</li>
+      <li><b>WireGuard</b> — Jason A. Donenfeld</li>
+      <li><b>Trivy</b> — Aqua Security · <b>Lynis</b> — CISOfy · <b>httpx</b> — ProjectDiscovery</li>
+    </ul></div>
+
+  <div class="cr-sec"><div class="cr-h">Libraries</div>
+    <p class="muted">CesiumJS (Apache-2.0), Cytoscape.js, satellite.js, mapillary-js, FastAPI, Uvicorn, SQLAlchemy, Pydantic.</p></div>
+
+  <div class="cr-sec"><div class="cr-h">Free data &amp; imagery</div>
+    <p class="muted">Esri World Imagery · OpenStreetMap / Nominatim · Shodan InternetDB · abuse.ch (Feodo/URLhaus) · Have I Been Pwned · NASA FIRMS &amp; GIBS · RainViewer · Windy Webcams · CelesTrak (satellite TLEs) · DOT&nbsp;511 / NZTA traffic cameras · Mapillary · MITRE ATT&amp;CK. All used via free / no-cost tiers — see the Settings billing note: R.O.D.E has no paid APIs.</p></div>
+
+  <p class="muted" style="font-size:11px;margin-top:4px">Trademarks and licenses are the property of their respective owners. R.O.D.E is an independent educational project and is not affiliated with or endorsed by any of the above.</p>
+</div>
+</div></div>`; }
 async function loadCaps(){
   const el=$('#caps'); el.innerHTML='<div class="muted">Checking…</div>';
   try{ const c=await API('/capabilities');

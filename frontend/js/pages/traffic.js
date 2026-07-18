@@ -1,15 +1,11 @@
-// pages/traffic.js — Live Traffic Monitor. Real tshark capture when available,
-// clearly-labelled simulated feed otherwise. Play/pause/speed control the DISPLAY
-// (buffer + drain), which works for both real and simulated sources.
+// pages/traffic.js — Live Traffic Monitor. Real tshark capture ONLY — R.O.D.E never
+// fabricates packets. When capture is unavailable the feed stays empty and says why.
+// Play/pause/speed control the DISPLAY buffer; capture runs underneath.
 import { $, toast, S, escapeHtml, pageHead } from '../core.js';
 import { renderInspector } from '../inspector.js';
-let ws=null, mode='sim', playing=false, speed=1, seq=0, rows=[], buffer=[], sel=null, ifaces=[];
-let drainTimer=null, simTimer=null, capStarted=false;
+let ws=null, mode='none', playing=false, speed=1, seq=0, rows=[], buffer=[], sel=null, ifaces=[];
+let drainTimer=null, capStarted=false;
 let lanMap={}, selfIp='', gatewayIp='';
-const HOSTS=['192.168.1.14','192.168.1.1','10.0.0.5','93.184.216.34','142.250.72.14','127.0.0.1'];
-const PROTO=['TCP','UDP','TLS','HTTP','DNS','ARP'];
-const ALERTS=[{k:'Port scan',why:'many SYNs to sequential ports from one host'},{k:'ARP spoofing',why:'gateway IP now maps to a new MAC'},{k:'DNS tunneling',why:'long, high-entropy subdomain lookups'}];
-const rnd=a=>a[Math.floor(Math.random()*a.length)];
 const PROTONAMES={MDNS:'device discovery (mDNS/Bonjour)',ARP:'finding a device (ARP)',DNS:'name lookup (DNS)',LLMNR:'name lookup (LLMNR)',NBNS:'name lookup (NetBIOS)',TLS:'encrypted web (HTTPS/TLS)',HTTP:'web page (HTTP)',QUIC:'encrypted web (QUIC)',SSDP:'device discovery (UPnP)',DHCP:'getting an IP (DHCP)',DHCPV6:'getting an IP (DHCPv6)',ICMP:'ping / network test',ICMPV6:'IPv6 signalling',IGMP:'multicast group join',NTP:'clock sync (NTP)',TCP:'connection (TCP)',UDP:'datagram (UDP)',SSH:'secure shell (SSH)',STUN:'NAT traversal (STUN)',TFTP:'file transfer (TFTP)'};
 const GLOSS={MDNS:'Devices announcing and looking up each other by name on your LAN — normal constant background chatter.',ARP:'A device asking "who has this IP?" to locate another device on the LAN.',DNS:'Turning a website name into an IP address.',SSDP:'A device advertising itself (casting, printers) via UPnP.',TLS:'Encrypted web traffic — you can see who is talking, not what they say.',DHCP:'A device asking the router for an IP address to join the network.',NTP:'A device syncing its clock.'};
 function protoInfo(p){ const k=(p||'').split(' ')[0].toUpperCase(); return PROTONAMES[p]||PROTONAMES[k]||(p||'traffic'); }
@@ -41,8 +37,8 @@ async function loadLan(){
 function shell(){ return `
 <div class="page">${pageHead({
   title:'Live Traffic', tag:'…', tagId:'modetag',
-  intro:'Realtime traffic with defensive alerting. Uses <b>tshark</b> for real capture when installed with privileges; otherwise a clearly-labelled simulated feed. Play/pause and speed control the display in both modes.',
-  help:"This is the <b>defensive</b> side of R.O.D.E — watching your own wire. Real capture needs tshark (part of Wireshark) running with capture privileges / Npcap on Windows; without it you get a clearly-labelled simulated feed so the UI still makes sense. Each packet is annotated in plain English (this PC / your router / a vendor device / the internet) and flagged when a heuristic alert fires. Play/pause and speed act on the display buffer, not the capture, so you can pause a busy feed and read it."
+  intro:'Realtime traffic with defensive alerting, captured from your own wire with <b>tshark</b>. Play/pause and speed control the display buffer while capture keeps running underneath.',
+  help:"This is the <b>defensive</b> side of R.O.D.E — watching your own wire. Real capture needs tshark (part of Wireshark) running with capture privileges / Npcap on Windows. Without it the feed stays empty and tells you how to enable it — R.O.D.E never fabricates packets. Each real packet is annotated in plain English (this PC / your router / a vendor device / the internet) and flagged when a heuristic alert fires. Play/pause and speed act on the display buffer, not the capture, so you can pause a busy feed and read it."
 })}
 <div class="page-body">
   <div class="tf-banner" id="banner">Connecting to capture engine…</div>
@@ -64,9 +60,6 @@ function shell(){ return `
   </div>
 </div></div>`; }
 
-function makeSim(){ seq++; const src=rnd(HOSTS),dst=rnd(HOSTS.filter(h=>h!==src)),proto=rnd(PROTO),len=40+((Math.random()*1400)|0);
-  const al=Math.random()<0.08?rnd(ALERTS):null;
-  return {id:seq,t:new Date().toLocaleTimeString().split(' ')[0],src,dst,proto,len,summary:al?al.k:`${proto} seq=${seq}`,alert:al,info:`${proto} ${src}→${dst}`}; }
 function realRow(p,alerts){ seq++; const al=(alerts&&alerts[0])||null;
   buffer.push({id:p.num||seq,t:p.t||'',src:p.src||'',dst:p.dst||'',proto:p.proto||'',len:+p.len||0,summary:p.info||p.proto,alert:al,info:p.info||''});
   if(buffer.length>2000)buffer.shift(); }
@@ -109,20 +102,20 @@ function startDrain(){ clearInterval(drainTimer); drainTimer=null; if(!playing)r
     const per = speed>=1 ? Math.min(buffer.length,30) : Math.max(1, Math.ceil(speed*6));
     for(let i=0;i<per && buffer.length;i++) pushRow(buffer.shift());
   }, 120); }
-function startSim(){ clearInterval(simTimer); simTimer=null; if(mode!=='sim'||!playing)return;
-  simTimer=setInterval(()=>{ if(playing){ buffer.push(makeSim()); if(buffer.length>1500)buffer.shift(); } }, 220); }
-function setPlaying(on){ playing=on; $('#playlbl').textContent=on?'Pause':'Play';
+function setPlaying(on){
+  if(on && mode!=='real'){ toast('Live capture needs tshark (Wireshark) — nothing to play','warn'); return; }
+  playing=on; $('#playlbl').textContent=on?'Pause':'Play';
   if(mode==='real' && on && !capStarted && ws && ws.readyState===1){ ws.send(JSON.stringify({action:'start',iface:$('#iface').value})); capStarted=true; }
-  startSim(); startDrain(); }
+  startDrain(); }
 
 function mount(root){
-  root.innerHTML=shell(); rows=[]; buffer=[]; sel=null; seq=0; mode='sim'; playing=false; capStarted=false;
+  root.innerHTML=shell(); rows=[]; buffer=[]; sel=null; seq=0; mode='none'; playing=false; capStarted=false;
   if(S.ctx&&S.ctx.target){ $('#filt').value=String(S.ctx.target).replace(/^\w+:\/\//,'').split('/')[0]; S.ctx.target=null; }
   $('#filt').oninput=renderFeed;
   loadLan();
   $('#play').onclick=()=>setPlaying(!playing);
-  $('#step').onclick=()=>{ if(buffer.length)pushRow(buffer.shift()); else if(mode==='sim')pushRow(makeSim()); };
-  $('#reset').onclick=()=>{ playing=false; $('#playlbl').textContent='Play'; clearInterval(simTimer); clearInterval(drainTimer);
+  $('#step').onclick=()=>{ if(buffer.length)pushRow(buffer.shift()); };
+  $('#reset').onclick=()=>{ playing=false; $('#playlbl').textContent='Play'; clearInterval(drainTimer);
     if(mode==='real'&&ws&&ws.readyState===1){ try{ws.send(JSON.stringify({action:'stop'}));}catch(e){} } capStarted=false;
     buffer=[]; rows=[]; sel=null; renderFeed(); $('#alerts').innerHTML='<div class="muted">No suspicious activity yet.</div>'; $('#detail').textContent='Click a packet to inspect its layers.'; $('#bufmeta').textContent=''; };
   $('#spd').oninput=e=>{ speed=+e.target.value; $('#spdlbl').textContent=speed>=1?'realtime':(speed*100|0)+'%'; startDrain(); };
@@ -135,11 +128,13 @@ function connectCap(){
     ws.onmessage=e=>{ const m=JSON.parse(e.data);
       if(m.type==='caps'){ if(m.available){ mode='real'; ifaces=m.interfaces||[];
           $('#modetag').textContent='live capture'; $('#modetag').className='tag';
+          const pb=$('#play'); if(pb)pb.disabled=false;
           $('#banner').innerHTML='● <b>Live capture</b> via tshark. Pick an interface and press Play. Needs capture privileges (admin/root · Npcap on Windows). Play/Pause and speed control the display; capture keeps running underneath.';
           $('#iface').style.display=''; $('#iface').innerHTML=ifaces.map(n=>`<option value="${n.id||n}">${(n.label||n)}</option>`).join('')||'<option value="1">default</option>';
         } else {
-          mode='sim'; $('#modetag').textContent='simulated preview'; $('#modetag').className='tag soon';
-          $('#banner').innerHTML='▶ <b>tshark not detected</b> — simulated preview shown. Real capture needs Wireshark (bundles tshark + Npcap). '+
+          mode='none'; $('#modetag').textContent='capture unavailable'; $('#modetag').className='tag soon';
+          const pb=$('#play'); if(pb)pb.disabled=true;
+          $('#banner').innerHTML='■ <b>tshark not detected</b> — live capture is unavailable, so the feed is empty (R.O.D.E does not fabricate packets). Real capture needs Wireshark, which bundles tshark + Npcap. '+
             '<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span class="kbd">'+WGCMD+'</span>'+
             '<button class="sm ghost" id="copycmd">Copy</button><button class="sm ghost" id="recheck">Re-check</button>'+
             '<span class="muted">run it, then relaunch R.O.D.E as administrator</span></div>';
@@ -149,9 +144,9 @@ function connectCap(){
       else if(m.type==='pkt'){ realRow(m.pkt,m.alerts); }
       else if(m.type==='error'){ $('#banner').innerHTML='⚠ '+m.message; toast(m.message,'warn'); }
     };
-    ws.onerror=()=>{ $('#modetag').textContent='simulated preview'; $('#modetag').className='tag soon'; $('#banner').innerHTML='▶ Simulated preview (capture engine unreachable).'; };
-  }catch(e){ $('#banner').innerHTML='▶ Simulated preview.'; }
+    ws.onerror=()=>{ mode='none'; $('#modetag').textContent='capture unreachable'; $('#modetag').className='tag soon'; const pb=$('#play'); if(pb)pb.disabled=true; $('#banner').innerHTML='⚠ Capture engine unreachable — is the server running?'; };
+  }catch(e){ mode='none'; const pb=$('#play'); if(pb)pb.disabled=true; $('#banner').innerHTML='⚠ Could not reach the capture engine.'; }
 }
-function unmount(){ clearInterval(simTimer); clearInterval(drainTimer); simTimer=drainTimer=null; playing=false;
+function unmount(){ clearInterval(drainTimer); drainTimer=null; playing=false;
   if(ws){ try{ws.close();}catch(e){} ws=null; } }
 export default { id:'traffic', label:'Live Traffic', short:'Traffic', mount, unmount };

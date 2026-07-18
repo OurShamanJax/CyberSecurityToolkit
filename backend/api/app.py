@@ -598,6 +598,42 @@ def api_fires(bbox: str = "", days: int = 1):
     return wildfire.fires(bb, days)
 
 
+# ── Camera Guard: audit YOUR OWN cameras/IoT (defensive) ─────────────────────
+class CamScanIn(BaseModel):
+    hint: str | None = None
+
+
+@app.post("/api/camaudit/lan")
+def api_camaudit_lan(body: CamScanIn):
+    """Audit your OWN LAN for exposed cameras/IoT. Scope-locked to private ranges."""
+    from .. import camaudit
+    return camaudit.scan_lan(hint=body.hint)
+
+
+@app.get("/api/camaudit/exposure")
+def api_camaudit_exposure():
+    """Is a camera/IoT port on YOUR home connection reachable from the internet?
+    Uses this machine's own public IP only — takes no address argument by design."""
+    from .. import camaudit
+    return camaudit.check_exposure()
+
+
+@app.get("/api/camaudit/sample")
+def api_camaudit_sample():
+    """A clearly-labelled SAMPLE audit so the feature can be seen working without a
+    camera. Never mixed into a real scan (is_sample=True)."""
+    from .. import camaudit
+    return camaudit.sample_audit()
+
+
+@app.get("/api/camaudit/disclosure")
+def api_camaudit_disclosure(brand: str = "the device", ip: str = "203.0.113.10", finder: str = ""):
+    """Responsible-disclosure template (educational) for reporting — not accessing —
+    someone else's exposed device."""
+    from .. import camaudit
+    return {"ok": True, "template": camaudit.disclosure_template(brand=brand, ip=ip, finder=finder)}
+
+
 @app.get("/api/data/output/info")
 def api_output_info():
     """Size + file count of data/output (saved tool run text)."""
