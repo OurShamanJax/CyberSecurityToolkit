@@ -10,7 +10,7 @@ let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null;
 let cams=[], camEntities=[], satEntities=[], overlayEntities=[], traceEntities=[], locateEntities=[];
 let importedSources=new Set();
 let spinOn=true, spinSpeed=1, lastInteract=0, modalOpen=false;
-let satView=false, satViewSat=null, satViewAlt=700000, satSpeed=0.25, satViewTime=null, satLastFrame=0;
+let satView=false, satViewSat=null, satViewAlt=700000, satSpeed=0.25, satViewTime=null, satLastFrame=0, satHudLast=0;
 const layers={ inv:true, trace:true, cam:false, sat:false };
 function saveLayers(){ try{ localStorage.setItem('rode.atlasLayers', JSON.stringify(layers)); }catch(e){} }
 const ESRI='https://services.arcgisonline.com/ArcGIS/rest/services/';
@@ -57,6 +57,7 @@ function shell(){ return `
         <label class="ap-row"><input type="checkbox" id="hill"/> <span>Terrain shading (hillshade)</span></label>
         <label class="ap-row"><input type="checkbox" id="labels" checked/> <span>Labels</span></label>
         <label class="ap-row"><input type="checkbox" id="sun" checked/> <span>Sunlight day/night</span></label>
+        <label class="ap-row" title="HDR + anti-aliasing — richer light &amp; smoother edges. Turn off if the globe feels sluggish."><input type="checkbox" id="cine" checked/> <span>Cinematic quality (HDR)</span></label>
       </div>
     </div>
 
@@ -67,6 +68,14 @@ function shell(){ return `
   </div>
 
   <div id="satView" style="position:absolute;inset:0;display:none;pointer-events:none;z-index:6">
+    <div id="satFx">
+      <div class="sv-drift"><div class="sv-vig"></div><div class="sv-scan"></div><div class="sv-grain"></div></div>
+      <div class="sv-bracket tl"></div><div class="sv-bracket tr"></div><div class="sv-bracket bl"></div><div class="sv-bracket br"></div>
+      <div class="sv-cross"></div>
+      <div class="sv-hud sv-tl"><span class="sv-rec"></span>REC · <span id="svClock">--:--:--</span></div>
+      <div class="sv-hud sv-tr" id="svTelem"></div>
+      <div class="sv-hud sv-bl">SIM · optical downlink · rendered from map imagery</div>
+    </div>
     <div style="position:absolute;top:14px;left:50%;transform:translateX(-50%);pointer-events:auto;background:rgba(224,164,65,.12);border:1px solid rgba(224,164,65,.42);color:#e3c078;padding:7px 13px;border-radius:9px;font-size:12px;max-width:80%;text-align:center">
       <b id="satViewName"></b> — <b>SIMULATED viewpoint</b> · rendered from map imagery. <b>Not a live camera feed.</b> <button class="sm ghost" id="svExitTop" style="margin-left:8px">Exit ⎋</button></div>
     <div style="position:absolute;bottom:22px;left:50%;transform:translateX(-50%);pointer-events:auto;display:flex;gap:8px">
@@ -97,6 +106,16 @@ function initCesium(){
   viewer.scene.backgroundColor=Cesium.Color.fromCssColorString('#05070b');
   try{ viewer.clock.currentTime=Cesium.JulianDate.now(); viewer.clock.multiplier=1; viewer.clock.shouldAnimate=true;
         g.dynamicAtmosphereLighting=true; g.atmosphereLightIntensity=8.0; }catch(e){}
+  // realism: richer atmosphere + depth fog (cheap; always on)
+  try{ const sc=viewer.scene;
+    sc.fog.enabled=true; sc.fog.density=0.00016; sc.fog.screenSpaceErrorFactor=4;
+    if(sc.skyAtmosphere){ sc.skyAtmosphere.saturationShift=0.12; sc.skyAtmosphere.brightnessShift=0.05;
+      try{ sc.skyAtmosphere.atmosphereLightIntensity=12; }catch(_){} }
+    try{ g.atmosphereBrightnessShift=0.08; g.atmosphereSaturationShift=0.12; }catch(_){}
+    try{ g.showGroundAtmosphere=true; }catch(_){}
+  }catch(e){}
+  let cine=true; try{ const c=localStorage.getItem('rode.atlasCine'); if(c!==null)cine=c==='1'; }catch(e){}
+  setCinematic(cine);
   viewer.scene.preRender.addEventListener(()=>{
     if(satView){ followSat(); return; }
     if(!spinOn || modalOpen) return;
@@ -147,6 +166,13 @@ function setHill(on){
   if(hillLayer){ viewer.imageryLayers.remove(hillLayer,true); hillLayer=null; }
   if(on){ hillLayer=viewer.imageryLayers.addImageryProvider(esri('Elevation/World_Hillshade')); hillLayer.alpha=0.45;
     if(baseLayer) viewer.imageryLayers.raise(hillLayer); }
+}
+
+// HDR + MSAA — the heavier realism knobs, gated so users can drop them if it lags.
+function setCinematic(on){ if(!viewer)return; const sc=viewer.scene;
+  try{ if(sc.highDynamicRangeSupported) sc.highDynamicRange=!!on; }catch(e){}
+  try{ sc.msaaSamples = on?2:1; sc.requestRender&&sc.requestRender(); }catch(e){}
+  try{ localStorage.setItem('rode.atlasCine', on?'1':'0'); }catch(e){}
 }
 
 // ── camera and view helpers ──
@@ -278,10 +304,23 @@ async function addToGraph(type, value, meta){
 }
 
 // ── cameras (optional layer, off by default) ──
+// Each source auto-imports when the globe view intersects its bounds
+// [west, south, east, north]. Government DOT feeds — public, no account.
 const CAM_SOURCES=[
   {id:'tfl', name:'London (TfL)',   bounds:[-0.62, 51.20, 0.36, 51.76]},
   {id:'nyc', name:'New York (DOT)', bounds:[-74.30, 40.48, -73.68, 40.93]},
   {id:'caltrans', name:'California (Caltrans)', bounds:[-124.6, 32.4, -114.0, 42.1]},
+  // "One Network" 511 family — US states + Canadian provinces
+  {id:'on',     name:'Ontario 511',       bounds:[-95.2, 41.6, -74.0, 51.5]},
+  {id:'ab',     name:'Alberta 511',       bounds:[-120.1, 48.9, -109.9, 60.1]},
+  {id:'ns',     name:'Nova Scotia 511',   bounds:[-66.5, 43.3, -59.7, 47.1]},
+  {id:'sk',     name:'Saskatchewan 511',  bounds:[-110.0, 48.9, -101.3, 60.1]},
+  {id:'nv',     name:'Nevada NDOT',       bounds:[-120.1, 34.9, -113.9, 42.1]},
+  {id:'wi',     name:'Wisconsin 511',     bounds:[-92.9, 42.4, -86.7, 47.1]},
+  {id:'pa',     name:'Pennsylvania 511',  bounds:[-80.6, 39.6, -74.6, 42.4]},
+  {id:'ne_usa', name:'New England 511',   bounds:[-73.6, 42.6, -66.8, 47.6]},
+  {id:'neska',  name:'Nebraska 511',      bounds:[-104.1, 39.9, -95.2, 43.1]},
+  {id:'la',     name:'Louisiana 511',     bounds:[-94.1, 28.8, -88.7, 33.1]},
 ];
 function viewRectDeg(){ if(!viewer)return null;
   try{ const r=viewer.camera.computeViewRectangle(); if(!r)return null;
@@ -379,8 +418,13 @@ function enterSatView(sat){ if(!viewer)return; closeModal(); satView=true; satVi
 function followSat(){ if(!viewer||!satViewSat)return; const t=performance.now(); if(!satLastFrame)satLastFrame=t;
   satViewTime=new Date(satViewTime.getTime()+(t-satLastFrame)*satSpeed); satLastFrame=t;
   try{ const pv=satellite.propagate(satViewSat.rec,satViewTime), gmst=satellite.gstime(satViewTime), geo=satellite.eciToGeodetic(pv.position,gmst);
-    viewer.camera.setView({ destination:Cesium.Cartesian3.fromDegrees(satellite.degreesLong(geo.longitude),satellite.degreesLat(geo.latitude),satViewAlt),
-      orientation:{heading:0,pitch:-Cesium.Math.PI_OVER_TWO,roll:0} }); }catch(e){} }
+    const lo=satellite.degreesLong(geo.longitude), la=satellite.degreesLat(geo.latitude);
+    viewer.camera.setView({ destination:Cesium.Cartesian3.fromDegrees(lo,la,satViewAlt),
+      orientation:{heading:0,pitch:-Cesium.Math.PI_OVER_TWO,roll:0} });
+    if(t-satHudLast>180){ satHudLast=t;
+      const te=$('#svTelem'); if(te)te.innerHTML='LAT '+la.toFixed(4)+'°<br>LON '+lo.toFixed(4)+'°<br>ALT '+(satViewAlt/1000).toFixed(0)+' km';
+      const ck=$('#svClock'); if(ck)ck.textContent=satViewTime.toISOString().substr(11,8); }
+  }catch(e){} }
 function exitSatView(){ satView=false; satViewSat=null; $('#satView').style.display='none';
   try{ viewer.scene.screenSpaceCameraController.enableInputs=true; }catch(e){}
   if($('#spin')) spinOn=$('#spin').checked; if(viewer){ try{ viewer.camera.flyHome(1.4); }catch(e){} } }
@@ -451,6 +495,8 @@ function mount(root){
   $('#hill').onchange=e=>setHill(e.target.checked);
   $('#labels').onchange=e=>setLabels(e.target.checked);
   $('#sun').onchange=e=>{ if(viewer)viewer.scene.globe.enableLighting=e.target.checked; };
+  $('#cine').onchange=e=>setCinematic(e.target.checked);
+  try{ const c=localStorage.getItem('rode.atlasCine'); if(c!==null&&$('#cine'))$('#cine').checked=c==='1'; }catch(e){}
   $('#spin').onchange=e=>{ spinOn=e.target.checked; try{ localStorage.setItem('rode.atlasSpin', spinOn?'1':'0'); }catch(_){} };
   $('#spd').onchange=e=>{ spinSpeed=+e.target.value||1; };
   $('#lyInv').onchange=e=>{ layers.inv=e.target.checked; saveLayers(); loadOverlay(); };

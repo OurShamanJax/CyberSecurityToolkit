@@ -460,3 +460,28 @@ body.compact .page-body{padding:14px}
 .hm-is{font-size:11px;margin-left:2px}
 .hm-cur{margin-left:auto;font-size:10px;text-transform:uppercase;letter-spacing:.5px;color:var(--accent)}
 @media(max-width:720px){.hm-stats{grid-template-columns:repeat(2,1fr)}.hm-grid{grid-template-columns:1fr}}
+
+/* satellite viewport — cinematic "live downlink" look (clearly labelled SIM) */
+#satFx{position:absolute;inset:0;pointer-events:none;overflow:hidden}
+.sv-drift{position:absolute;inset:-3%;animation:sv-drift 9s ease-in-out infinite}
+.sv-vig{position:absolute;inset:0;background:radial-gradient(ellipse 72% 72% at 50% 50%,rgba(0,0,0,0) 54%,rgba(0,0,0,.58) 100%);box-shadow:inset 0 0 120px 26px rgba(0,0,0,.5)}
+.sv-scan{position:absolute;inset:0;background:repeating-linear-gradient(to bottom,rgba(0,0,0,0) 0,rgba(0,0,0,0) 2px,rgba(0,0,0,.16) 3px,rgba(0,0,0,0) 4px);animation:sv-flick 5s steps(50) infinite}
+.sv-grain{position:absolute;inset:-50%;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='140' height='140'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='140' height='140' filter='url(%23n)'/%3E%3C/svg%3E");opacity:.07;mix-blend-mode:overlay;animation:sv-grain .6s steps(3) infinite}
+.sv-bracket{position:absolute;width:32px;height:32px;border:2px solid rgba(120,220,180,.65)}
+.sv-bracket.tl{top:56px;left:22px;border-right:0;border-bottom:0}
+.sv-bracket.tr{top:56px;right:22px;border-left:0;border-bottom:0}
+.sv-bracket.bl{bottom:72px;left:22px;border-right:0;border-top:0}
+.sv-bracket.br{bottom:72px;right:22px;border-left:0;border-top:0}
+.sv-cross{position:absolute;top:50%;left:50%;width:46px;height:46px;transform:translate(-50%,-50%);opacity:.5}
+.sv-cross::before,.sv-cross::after{content:'';position:absolute;background:rgba(120,220,180,.7)}
+.sv-cross::before{left:50%;top:0;width:1px;height:100%;transform:translateX(-.5px)}
+.sv-cross::after{top:50%;left:0;height:1px;width:100%;transform:translateY(-.5px)}
+.sv-hud{position:absolute;font-family:var(--mono,monospace);font-size:11px;letter-spacing:.5px;color:rgba(150,240,200,.85);text-shadow:0 0 6px rgba(0,0,0,.85);line-height:1.55}
+.sv-tl{top:58px;left:60px}
+.sv-tr{top:58px;right:60px;text-align:right}
+.sv-bl{bottom:76px;left:60px;color:rgba(224,164,65,.8)}
+.sv-rec{display:inline-block;width:8px;height:8px;border-radius:50%;background:#ff4d4d;margin-right:6px;vertical-align:middle;box-shadow:0 0 6px #ff4d4d;animation:sv-blink 1.1s steps(2) infinite}
+@keyframes sv-drift{0%{transform:translate(0,0)}25%{transform:translate(.8%,-.6%)}50%{transform:translate(-.5%,.7%)}75%{transform:translate(.4%,.5%)}100%{transform:translate(0,0)}}
+@keyframes sv-grain{0%{transform:translate(0,0)}33%{transform:translate(-4%,3%)}66%{transform:translate(3%,-2%)}100%{transform:translate(0,0)}}
+@keyframes sv-flick{0%,96%{opacity:.55}97%{opacity:.32}100%{opacity:.6}}
+@keyframes sv-blink{0%,50%{opacity:1}51%,100%{opacity:.15}}

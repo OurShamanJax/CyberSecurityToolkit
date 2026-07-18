@@ -100,9 +100,18 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - [ ] gowitness **screenshots on nodes**; **live threat map**. `[WRAP]/[FUN]`
 
 ### Globe polish (Atlas / Map lens)
-- [ ] **Satellite viewport → live-feed look** — film grain, scanlines, vignette, HUD framing,
-      subtle drift/jitter to mimic a real downlink. `[FUN]`
-- [ ] **Globe realism** — Cesium ground/sky atmosphere, fog, HDR, sun lighting; guard perf. `[FUN]`
+- [x] **More public camera feeds** — generic **"One Network" 511 importer** (public, no-key
+      `/api/v2/get/cameras`) covering Ontario, Alberta, Nova Scotia, Saskatchewan, Nevada,
+      Wisconsin, Pennsylvania, New England, Nebraska, Louisiana — on top of Caltrans / NYC /
+      London / Windy. Cameras auto-load by viewport. Legit published DOT feeds only (no
+      Insecam-style unsecured cams). `[WRAP]` *(endpoints implemented to documented schema;
+      verify live coverage on a networked machine — dead ones fail gracefully.)*
+- [x] **Satellite viewport → live-feed look** — CSS FX overlay: film grain, scanlines,
+      vignette, corner brackets + crosshair, blinking REC, live LAT/LON/ALT + UTC telemetry,
+      gentle drift. Still clearly labelled **SIM** (honest). `[done]`
+- [x] **Globe realism** — always-on ground/sky atmosphere + depth fog + atmosphere
+      saturation/brightness; **Cinematic quality** toggle for HDR + MSAA (default on, drop it
+      if it lags). `[done]`
 
 ### Quality of life
 - [ ] Notes + tags on entities; investigation **entity search**.

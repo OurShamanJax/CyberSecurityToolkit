@@ -5,6 +5,7 @@ webcams) — added by the user or seeded as examples. NOT device-exposure scanni
 The snapshot proxy only ever fetches URLs already in this list (no arbitrary SSRF).
 """
 import json, urllib.request, urllib.error
+from urllib.parse import urlparse
 from .config import settings
 
 _FILE = settings.DATA_DIR / "cameras.json"
@@ -176,12 +177,80 @@ def import_windy(lat, lng, radius_km, key: str) -> dict:
     return {"ok": True, "added": added, "total": len(rows)}
 
 
+# ── "One Network" 511 family — a public, no-key camera API used by many US state
+#    and Canadian provincial DOTs. Same JSON shape everywhere, so ONE importer
+#    covers all of them; add a jurisdiction by adding a base URL here + a bounds
+#    box in the frontend CAM_SOURCES. Endpoint: /api/v2/get/cameras
+_ONE_NETWORK = {
+    "on":     ("https://511on.ca",         "CA", "Ontario 511"),
+    "ab":     ("https://511.alberta.ca",   "CA", "Alberta 511"),
+    "ns":     ("https://511.novascotia.ca","CA", "Nova Scotia 511"),
+    "sk":     ("https://hb.511.saskatchewan.ca", "CA", "Saskatchewan HB511"),
+    "nv":     ("https://www.nvroads.com",   "US", "Nevada NDOT"),
+    "wi":     ("https://511wi.gov",         "US", "Wisconsin 511"),
+    "pa":     ("https://www.511pa.com",     "US", "Pennsylvania 511"),
+    "ne_usa": ("https://newengland511.org", "US", "New England 511"),
+    "neska":  ("https://511.nebraska.gov",  "US", "Nebraska 511"),
+    "la":     ("https://www.511la.org",     "US", "Louisiana 511"),
+}
+
+
+def _import_onenetwork(code: str) -> dict:
+    """Import one One-Network/511 jurisdiction's public traffic cameras."""
+    base, country, label = _ONE_NETWORK[code]
+    url = base + "/api/v2/get/cameras?format=json&lang=en"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=25) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as e:
+        return {"ok": False, "error": f"{label}: {str(e)[:120]}"}
+    items = data if isinstance(data, list) else (data.get("cameras") or data.get("Cameras") or [])
+    rows = [r for r in _load() if (r.get("url") or "").strip() and r.get("src") != code]
+    seen = {r.get("url") for r in rows}
+    nid = _next_id(rows); added = 0
+    for it in items:
+        if not isinstance(it, dict):
+            continue
+        lat = it.get("Latitude", it.get("latitude"))
+        lng = it.get("Longitude", it.get("longitude"))
+        img = None
+        for v in (it.get("Views") or it.get("views") or []):
+            if isinstance(v, dict):
+                u = v.get("Url") or v.get("url")
+                if u and str(v.get("Status", "Enabled")).lower() != "disabled":
+                    img = u; break
+        if not img:
+            img = it.get("ImageUrl") or it.get("imageUrl") or it.get("Url") or it.get("url")
+        nm = (it.get("Location") or it.get("RoadwayName") or it.get("Roadway")
+              or it.get("Name") or f"{label} cam")
+        try:
+            lat = float(lat); lng = float(lng)
+            if not img or img in seen or not (lat and lng):
+                continue
+            nid += 1; seen.add(img)
+            rows.append({"id": nid, "name": str(nm)[:80], "lat": lat, "lng": lng,
+                         "country": country, "type": "traffic", "url": img,
+                         "video": "", "stream": "jpg", "src": code})
+            added += 1
+        except Exception:
+            continue
+    if len(rows) > 6000:
+        rows = rows[-6000:]
+    _save(rows)
+    if added == 0:
+        return {"ok": False, "error": f"{label}: no cameras parsed", "added": 0, "total": len(rows)}
+    return {"ok": True, "added": added, "total": len(rows)}
+
+
 def import_source(name: str) -> dict:
     """Bulk-load real, published public cameras from a free/no-account source."""
     if name == "nyc":
         return _import_nyc()
     if name == "caltrans":
         return _import_caltrans()
+    if name in _ONE_NETWORK:
+        return _import_onenetwork(name)
     if name != "tfl":
         return {"ok": False, "error": "unknown source"}
     # Transport for London JamCams — ~900 public traffic cameras with live snapshots.
