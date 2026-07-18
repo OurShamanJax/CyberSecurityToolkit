@@ -303,7 +303,7 @@ function showFire(f){ setInfo('<b>🔥 Active fire</b><div class="muted" style="
 let _cullLast=0, _occluder=null;
 function cullOccluded(){
   if(!viewer) return;
-  const now=performance.now(); if(now-_cullLast<110) return; _cullLast=now;
+  const now=performance.now(); if(now-_cullLast<200) return; _cullLast=now;
   try{
     if(!_occluder) _occluder=new Cesium.EllipsoidalOccluder(viewer.scene.globe.ellipsoid);
     _occluder.cameraPosition=viewer.camera.positionWC;
@@ -716,14 +716,18 @@ function delCam(cam){ fetch('/api/cams/'+cam.id,{method:'DELETE'}).then(()=>{ cl
 
 // ── floating camera windows: open many feeds at once, drag/resize/close each ──
 function openCamWindow(cam){
-  const host=($('#cesiumViz')&&$('#cesiumViz').parentElement)||document.body;
+  // parented to <body> (position:fixed) so moving a window never touches the globe render
+  const host=document.body;
   const dup=camWindows.find(w=>w.camId===cam.id);
-  if(dup){ dup.el.style.zIndex=(++_camZ); return; }   // already open → bring to front
-  const n=camWindows.length%8;
+  if(dup){ dup.el.style.zIndex=(++_camZ); dup.el.style.outline='2px solid #4ec9c0'; setTimeout(()=>{try{dup.el.style.outline='';}catch(e){}},600); return; }
+  const n=camWindows.length%6;
+  const W=Math.min(560, Math.max(360, Math.round(window.innerWidth*0.34))), H=Math.round(W*0.7);
+  const left=Math.max(20, Math.round((window.innerWidth-W)/2)+(n-2)*30);
+  const top=Math.max(16, Math.round((window.innerHeight-H)/2)+(n-2)*26);
   const win=document.createElement('div');
-  win.style.cssText='position:absolute;z-index:'+(++_camZ)+';left:'+(96+n*26)+'px;top:'+(66+n*26)+'px;width:300px;height:232px;'+
-    'background:#0b0e13;border:1px solid rgba(255,255,255,.16);border-radius:10px;overflow:hidden;resize:both;'+
-    'min-width:180px;min-height:150px;max-width:900px;max-height:700px;box-shadow:0 12px 40px rgba(0,0,0,.55);display:flex;flex-direction:column';
+  win.style.cssText='position:fixed;z-index:'+(++_camZ)+';left:'+left+'px;top:'+top+'px;width:'+W+'px;height:'+H+'px;'+
+    'background:#0b0e13;border:1px solid rgba(255,255,255,.18);border-radius:10px;overflow:hidden;resize:both;'+
+    'min-width:220px;min-height:170px;max-width:96vw;max-height:90vh;box-shadow:0 18px 50px rgba(0,0,0,.6);display:flex;flex-direction:column';
   win.innerHTML='<div class="cw-bar" style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#141a22;cursor:grab;flex:0 0 auto;user-select:none">'+
     '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:#dbe3ea">'+escapeHtml(cam.name||'camera')+'</span>'+
     '<span class="cw-stat" style="font-size:9px;color:#8b97a5"></span>'+
@@ -743,14 +747,13 @@ function openCamWindow(cam){
   } else if(m.img){
     const img=document.createElement('img'); img.alt='feed'; img.style.cssText='width:100%;height:100%;object-fit:contain;background:#000'; body.appendChild(img);
     img.onerror=()=>{ stat.textContent='offline'; }; img.onload=()=>{ stat.textContent='live'; };
-    const tick=()=>{ img.src='/api/cams/'+cam.id+'/snapshot?t='+Date.now(); }; tick(); rec.timer=setInterval(tick,1500);
+    const tick=()=>{ if(document.hidden)return; img.src='/api/cams/'+cam.id+'/snapshot?t='+Date.now(); }; tick(); rec.timer=setInterval(tick,2500);
   } else { body.innerHTML='<div style="color:#8b97a5;padding:16px;font-size:12px">No feed set for this point.</div>'; }
   win.querySelector('.cw-x').onclick=()=>closeCamWindow(rec);
   win.addEventListener('mousedown',()=>{ win.style.zIndex=(++_camZ); });
   bar.addEventListener('mousedown',e=>{ if(e.target.classList.contains('cw-x'))return; e.preventDefault();
-    const hostR=host.getBoundingClientRect(), r=win.getBoundingClientRect(), ox=e.clientX-r.left, oy=e.clientY-r.top;
-    bar.style.cursor='grabbing';
-    const mv=ev=>{ win.style.left=Math.max(0,ev.clientX-hostR.left-ox)+'px'; win.style.top=Math.max(0,ev.clientY-hostR.top-oy)+'px'; };
+    const r=win.getBoundingClientRect(), ox=e.clientX-r.left, oy=e.clientY-r.top; bar.style.cursor='grabbing';
+    const mv=ev=>{ win.style.left=Math.max(0,ev.clientX-ox)+'px'; win.style.top=Math.max(0,ev.clientY-oy)+'px'; };
     const up=()=>{ bar.style.cursor='grab'; document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
     document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
   });
