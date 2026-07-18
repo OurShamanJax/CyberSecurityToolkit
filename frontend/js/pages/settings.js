@@ -19,6 +19,11 @@ function shell(){ return `
     <div id="caps"><div class="muted">Checking…</div></div>
     <button class="sm ghost" id="recheck" style="margin-top:10px">Re-check</button>
   </div>
+  <div class="card2"><h3>Storage</h3>
+    <p class="muted">Tool runs save their raw output text to <code>data/output</code>. Clearing it frees space and doesn't touch your investigations (those live in the database).</p>
+    <div id="outInfo" class="muted" style="font-size:12px;margin:6px 0 10px">checking…</div>
+    <button class="sm danger" id="clearOut">Clear tool output</button>
+  </div>
   <div class="card2"><h3>Scope policy</h3><p class="muted">v4 scope is <b>advisory</b> — nothing is blocked; off-scope targets get a one-time heads-up. Only test what you own or are authorized to test.</p></div>
   <div class="card2"><h3>About</h3><p class="muted">R.O.D.E v4 — a free/open-source security multitool. Everything runs locally or in Docker. No accounts, no API keys, no cloud.</p></div>
 </div></div></div>`; }
@@ -39,5 +44,18 @@ function mount(root){
   $('#sw').querySelectorAll('b').forEach(b=>{ b.classList.toggle('on',b.dataset.c===cur);
     b.onclick=()=>{ localStorage.setItem('rode.accent',b.dataset.c); document.documentElement.style.setProperty('--accent',b.dataset.c); $('#sw').querySelectorAll('b').forEach(x=>x.classList.toggle('on',x===b)); }; });
   $('#recheck').onclick=loadCaps; loadCaps();
+  loadOutInfo();
+  $('#clearOut').onclick=async ()=>{
+    if(!confirm('Delete all saved tool-run output files in data/output? Your investigations are kept.')) return;
+    try{ const r=await (await fetch('/api/data/output/clear',{method:'POST'})).json();
+      toast('Cleared '+(r.removed||0)+' file(s)','ok'); loadOutInfo(); }
+    catch(e){ toast('Could not clear output','warn'); }
+  };
+}
+async function loadOutInfo(){
+  const el=$('#outInfo'); if(!el)return;
+  try{ const d=await API('/data/output/info'); const mb=(d.bytes/1048576);
+    el.textContent=d.count?(d.count+' file(s) · '+(mb<0.1?(d.bytes/1024).toFixed(0)+' KB':mb.toFixed(1)+' MB')):'empty — nothing saved yet';
+  }catch(e){ el.textContent='—'; }
 }
 export default { id:'settings', label:'Settings', short:'Settings', mount, unmount(){} };

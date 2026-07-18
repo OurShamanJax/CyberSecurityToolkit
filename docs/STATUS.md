@@ -105,9 +105,18 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - [x] Threat-intel **node badges** (abuse.ch URLhaus/Feodo — free, cached) — known-bad IPs/
       domains get a red ring + an inspector chip naming the threat; auto-scan on graph load +
       a **Threats** toolbar button (force-refresh). `[API]` — done.
-- [ ] **Pwned Passwords** k-anonymity check. `[API]`
+- [x] **Pwned Passwords** k-anonymity check — Credentials page; password never leaves the
+      machine (only the SHA-1 prefix is sent). `[API]` — done.
 - [ ] **OWASP ZAP** baseline scan. `[WRAP]`
-- [ ] **Lynis** host audit. `[WRAP]`
+- [x] **Lynis** host audit — wrapped tool + parser (warnings/suggestions → findings, hardening
+      index → score). Linux/macOS. `[WRAP]` — done.
+- [x] **MITRE ATT&CK mapping** — tool/entity→technique map, coverage endpoint, Report section +
+      Home card + per-node inspector chips. — done.
+- [x] **Correlation rules** — combined-signal escalations (vuln+exploit, known-bad, exposed+
+      vulnerable, creds) on Home + Report; geo cross-link to the map. — done.
+- [x] **Run history + diff + export** — history list, line-diff between runs, JSON/CSV export
+      on Home. — done.
+- [x] **First-run tour** — guided 6-step overlay on Home + replay button. — done.
 - [ ] **Suricata/Zeek** behind Live Traffic. `[WRAP]`
 - [x] **LAN discovery** → graph (tool + one-click button, OUI vendors). `[WRAP]` — done.
 - [ ] gowitness **screenshots on nodes**; **live threat map**. `[WRAP]/[FUN]`

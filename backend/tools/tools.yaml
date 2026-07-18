@@ -309,3 +309,17 @@
     why:  "Turns an empty investigation into a map of your LAN in one run — every device becomes a node wired to the gateway."
     next: "Click a host to inspect it, then run Nmap or Exposure against the ones you care about."
     warn: "Scans only your local private /24 (auto-detected). Only scan networks you own or are authorized to test. Type 'auto' or your gateway IP as the target."
+
+- id: lynis
+  name: Lynis
+  category: defensive
+  input_type: host
+  noise: silent
+  parser: lynis
+  exec:
+    local:  { cmd: ["lynis", "audit", "system", "--quick", "--no-colors"] }
+    docker: { image: "cincan/lynis", args: ["audit", "system", "--quick", "--no-colors"] }
+  teach:
+    what: "Audits THIS machine's own security posture — a hardening score plus a warnings/suggestions checklist."
+    why:  "Pure defense: see what to harden on a box you own before someone else does. Linux/macOS (needs lynis installed, or Docker)."
+    next: "Fix the warnings, re-run, and watch the hardening index climb. Type 'localhost' as the target."

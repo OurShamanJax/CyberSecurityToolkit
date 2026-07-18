@@ -83,14 +83,20 @@ and pairs offense with the matching defense.
 ---
 
 ## My top picks (biggest value, low friction, safe)
-1. **Graph/Map/Timeline unify + GeoIP** — makes it *one* product (do this first).
+1. ✅ **Graph/Map/Timeline unify + GeoIP** — DONE. Three lenses on one investigation; entities
+   carry lat/lng and plot on the Cesium map.
 2. **OWASP ZAP** — instantly serious web-app coverage, free/Docker.
-3. **Threat-intel enrichment (abuse.ch) + Pwned-Passwords** — safe, free, makes nodes smart.
-4. **Lynis** — audit your own machine; pure defensive value, easy win.
+3. 🟡 **Threat-intel enrichment (abuse.ch)** — DONE (Feodo/URLhaus node badges). **Pwned
+   Passwords** still to do.
+4. **Lynis** — audit your own machine; pure defensive value, easy win. *(in progress)*
 5. **Suricata/Zeek behind Live Traffic** — turns the traffic tab into a real IDS.
 6. **MITRE ATT&CK mapping** — the "command center" layer that ties findings to a framework.
-7. **LAN auto-discovery → map** — the "see my whole home network" Bat Computer moment.
+   *(in progress)*
+7. ✅ **LAN auto-discovery → map** — DONE (private-/24 sweep + OUI vendors → graph).
 8. **gowitness screenshots on nodes** + **live threat map** — the visual wow.
+
+*(Also shipped from the lists above: searchsploit/Exploit-DB exploit paths, the Metasploit
+workbench, and the Windy/DOT camera + Living-Earth globe layers.)*
 
 *Guardrail through all of it: owned/authorized targets, offense paired with defense, free &
 local. Breadth is tempting — but the unify work makes every one of these land better, so

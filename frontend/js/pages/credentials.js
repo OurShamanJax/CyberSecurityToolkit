@@ -22,12 +22,26 @@ function shell(){ return `
   </div>
   <div class="card2"><h3>Result</h3><div id="res"><div class="muted">Run an audit to see attempts and any cracked credential.</div></div></div>
 </div>
+<div class="card2"><h3>Password breach check <span class="tag">k-anonymity</span></h3>
+  <p class="muted">Check if a password appears in known breaches. The password <b>never leaves your machine</b> — only the first 5 characters of its SHA-1 hash are sent (Have I Been Pwned), and the match is done locally. Safe to test your real passwords.</p>
+  <div style="display:flex;gap:8px;margin-top:6px"><input id="pw" type="password" placeholder="password to check" style="flex:1"/><button class="sm" id="pwgo">Check</button></div>
+  <div id="pwres" class="muted" style="margin-top:8px;font-size:12.5px"></div>
+</div>
 <div class="card2"><h3 style="color:var(--warnc)">Use policy</h3><p class="muted">Only test accounts and systems you own or are explicitly authorized to test. The lesson here is defensive: rate-limiting, account lockout, MFA, and slow salted password hashing are what stop this.</p></div>
 </div></div>`; }
 function mount(root){
   root.innerHTML=shell();
   if(S.ctx&&S.ctx.target){ try{ $('#base').value=new URL(S.ctx.target).origin; }catch(e){ $('#base').value=S.ctx.target; } S.ctx.target=null; toast('Target loaded from graph','ok'); }
   $('#preset').onclick=()=>{ $('#base').value='http://localhost:3000'; $('#path').value='/rest/user/login'; $('#user').value='admin@juice-sh.op'; $('#uf').value='email'; $('#pf').value='password'; $('#mode').value='json'; };
+  const pwgo=$('#pwgo'); if(pwgo){ const chk=async()=>{ const pw=$('#pw').value; if(!pw){ toast('Enter a password','warn'); return; }
+    $('#pwres').textContent='checking (k-anonymity)…';
+    try{ const r=await (await fetch('/api/pwned',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:pw})})).json();
+      if(!r.ok){ $('#pwres').textContent='check failed: '+escapeHtml(r.error||''); return; }
+      if(r.pwned) $('#pwres').innerHTML='<span style="color:var(--danger)">⚠ found in breaches '+r.count.toLocaleString()+' time(s)</span> — do not use this password anywhere.';
+      else $('#pwres').innerHTML='<span style="color:var(--ok)">✓ not found</span> in the breach corpus (still use a long, unique password).';
+    }catch(e){ $('#pwres').textContent='check failed'; }
+    $('#pw').value=''; };
+    pwgo.onclick=chk; $('#pw').onkeydown=e=>{ if(e.key==='Enter')chk(); }; }
   $('#go').onclick=run;
 }
 async function run(){

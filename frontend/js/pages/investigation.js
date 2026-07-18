@@ -294,6 +294,7 @@ async function nodeMenu(node){
   if(det.times_seen>1)chips.push(`<span class="ins-chip">seen ${det.times_seen}×</span>`);
   if(det.children)chips.push(`<span class="ins-chip" title="connected nodes in the graph">${det.children} connected</span>`);
   if(chips.length)h+=`<div class="ins-chips">${chips.join('')}</div>`;
+  if(det.attack&&det.attack.length)h+=`<div class="ins-row"><span class="k">ATT&CK</span><span class="v">${det.attack.map(t=>`<span class="ins-chip" title="${escapeHtml(t.tactic)}" style="background:var(--surface2);border:1px solid var(--line)">${escapeHtml(t.id)} ${escapeHtml(t.name)}</span>`).join(' ')}</span></div>`;
   if(meta.url)h+=`<div class="ins-row"><span class="k">affects</span><span class="v mono">${escapeHtml(meta.url)}</span></div>`;
   if(det.explain){ const ex=det.explain;
     h+=`<div class="ins-explain"><div class="ex-t">What this means</div><div class="ex-p">${escapeHtml(ex.plain||'')}</div>`;

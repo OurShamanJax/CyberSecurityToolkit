@@ -149,6 +149,20 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
     if not findings and not caps:
         P.append('<p class="muted">No findings or capabilities recorded yet. Run some tools, then regenerate this report.</p>')
 
+    # Correlations — escalated combined-signal findings (headline)
+    try:
+        from .. import correlate
+        corr = correlate.correlations(db, inv_id).get("correlations", [])
+    except Exception:
+        corr = []
+    if corr:
+        P.append("<h2>Correlations</h2>")
+        P.append('<p class="muted">Combined signals that escalate priority — the graph connecting the dots.</p>')
+        for c in corr:
+            col = SEV_COLOR.get(c["level"], "#5c7080")
+            P.append(f'<div class="note" style="border-left-color:{col}"><b>{_e(c["title"])} '
+                     f'<span class="pill" style="background:{col}">{_e(c["level"])}</span></b><br>{_e(c["why"])}</div>')
+
     # Findings
     if findings:
         P.append("<h2>Findings</h2>")
@@ -204,6 +218,23 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
             P.append(f'<tr><td>{aff_txt}</td><td>{_e(e.label or e.value)}</td>'
                      f'<td class="muted">{_e(m.get("platform",""))}</td>'
                      f'<td class="muted">{_e(m.get("cve",""))}</td><td>{ref}</td></tr>')
+        P.append('</table>')
+
+    # MITRE ATT&CK coverage — ties what was done to the framework
+    try:
+        from .. import attack
+        cov = attack.coverage(db, inv_id)
+    except Exception:
+        cov = {"tactics": []}
+    if cov["tactics"]:
+        P.append("<h2>MITRE ATT&amp;CK coverage</h2>")
+        P.append(f'<p class="muted">What this investigation did, mapped to the ATT&amp;CK framework — '
+                 f'{cov["technique_count"]} technique(s) across {cov["tactic_count"]} of '
+                 f'{cov["total_tactics"]} tactics.</p>')
+        P.append('<table><tr><th>Tactic</th><th>Techniques observed</th></tr>')
+        for t in cov["tactics"]:
+            techs = ", ".join(f'{_e(x["id"])} {_e(x["name"])}' for x in t["techniques"])
+            P.append(f'<tr><td><b>{_e(t["tactic"])}</b></td><td class="muted">{techs}</td></tr>')
         P.append('</table>')
 
     # Capabilities (from Binary Inspector)

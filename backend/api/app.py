@@ -225,6 +225,100 @@ def api_findings(inv_id: int, db: Session = Depends(get_db)):
     return [{"severity": f.severity, "title": f.title} for f in rows]
 
 
+@app.get("/api/attack/{inv_id}")
+def api_attack(inv_id: int, db: Session = Depends(get_db)):
+    """MITRE ATT&CK coverage for an investigation (tactics + techniques touched)."""
+    from .. import attack
+    return attack.coverage(db, inv_id)
+
+
+@app.get("/api/correlate/{inv_id}")
+def api_correlate(inv_id: int, db: Session = Depends(get_db)):
+    """Escalated correlation findings from combined signals in the graph."""
+    from .. import correlate
+    return correlate.correlations(db, inv_id)
+
+
+@app.get("/api/investigations/{inv_id}/runs")
+def api_run_history(inv_id: int, db: Session = Depends(get_db)):
+    """Run history for an investigation (newest first), with prev-same-tool links for diff."""
+    rows = db.query(Run).filter(Run.investigation_id == inv_id) \
+             .order_by(Run.created_at.desc()).all()
+    seen_prev = {}
+    out = []
+    for r in rows:
+        key = (r.tool_id, r.target)
+        prev = seen_prev.get(key)         # the newer one we already emitted → this is its predecessor
+        out.append({"id": r.id, "tool": r.tool_id, "target": r.target, "noise": r.noise,
+                    "status": r.status, "exit_code": r.exit_code, "duration_ms": r.duration_ms,
+                    "when": r.created_at.strftime("%Y-%m-%d %H:%M"),
+                    "has_output": bool(r.output_file), "prev_id": prev})
+        seen_prev[key] = r.id
+    # link each run to its *previous* same-tool run (for a diff)
+    latest = {}
+    for r in reversed(out):  # oldest first
+        key = (r["tool"], r["target"])
+        r["prev_id"] = latest.get(key)
+        latest[key] = r["id"]
+    return out
+
+
+@app.get("/api/runs/diff")
+def api_run_diff(a: int, b: int, db: Session = Depends(get_db)):
+    """Line-level diff between two runs' saved output (what changed since last time)."""
+    ra = db.query(Run).filter(Run.id == a).first()
+    rb = db.query(Run).filter(Run.id == b).first()
+    if not ra or not rb:
+        raise HTTPException(404, "run not found")
+
+    def read(r):
+        try:
+            return open(r.output_file, encoding="utf-8", errors="replace").read().splitlines() if r.output_file else []
+        except Exception:
+            return []
+    la, lb = read(ra), read(rb)
+    sa, sb = set(la), set(lb)
+    added = [l for l in lb if l not in sa and l.strip()]
+    removed = [l for l in la if l not in sb and l.strip()]
+    return {"a": {"id": ra.id, "when": ra.created_at.strftime("%Y-%m-%d %H:%M")},
+            "b": {"id": rb.id, "when": rb.created_at.strftime("%Y-%m-%d %H:%M")},
+            "added": added[:300], "removed": removed[:300],
+            "added_count": len(added), "removed_count": len(removed)}
+
+
+@app.get("/api/investigations/{inv_id}/export")
+def api_export(inv_id: int, format: str = "json", db: Session = Depends(get_db)):
+    """Export the whole investigation as JSON or a CSV of entities (shareable case file)."""
+    from fastapi.responses import Response
+    inv = db.query(Investigation).filter(Investigation.id == inv_id).first()
+    if not inv:
+        raise HTTPException(404, "not found")
+    ents = db.query(Entity).filter(Entity.investigation_id == inv_id).all()
+    ids = {e.id for e in ents}
+    rels = db.query(Relationship).filter(Relationship.source_id.in_(ids)).all() if ids else []
+    finds = db.query(Finding).filter(Finding.investigation_id == inv_id).all()
+    runs = db.query(Run).filter(Run.investigation_id == inv_id).all()
+    safe = "".join(c if c.isalnum() else "_" for c in inv.name)[:40] or "investigation"
+    if format == "csv":
+        import io, csv
+        buf = io.StringIO(); w = csv.writer(buf)
+        w.writerow(["type", "value", "label", "confidence", "confirmed"])
+        for e in ents:
+            w.writerow([e.type, e.value, e.label or "", round(e.confidence, 2), e.user_confirmed])
+        return Response(buf.getvalue(), media_type="text/csv",
+                        headers={"Content-Disposition": f'attachment; filename="RODE_{safe}_entities.csv"'})
+    data = {"investigation": {"id": inv.id, "name": inv.name, "scope": inv.scope(), "mode": inv.mode},
+            "entities": [{"type": e.type, "value": e.value, "label": e.label,
+                          "confidence": round(e.confidence, 2), "confirmed": e.user_confirmed,
+                          "metadata": e.metadata_dict()} for e in ents],
+            "relationships": [{"source": r.source_id, "target": r.target_id, "type": r.relation_type} for r in rels],
+            "findings": [{"severity": f.severity, "title": f.title} for f in finds],
+            "runs": [{"tool": r.tool_id, "target": r.target, "when": r.created_at.isoformat(),
+                      "status": r.status} for r in runs]}
+    return Response(json.dumps(data, indent=2), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="RODE_{safe}.json"'})
+
+
 @app.get("/api/entity/{entity_id}")
 def api_entity(entity_id: int, db: Session = Depends(get_db)):
     """Full detail for one node — powers the inspector card."""
@@ -236,10 +330,12 @@ def api_entity(entity_id: int, db: Session = Depends(get_db)):
     if e.type in ("vulnerability", "secret"):
         explain = kb_lookup(e.label or e.value, meta.get("severity", "info"))
     children = db.query(Relationship).filter(Relationship.source_id == e.id).count()
+    from .. import attack
+    tech = attack.techniques_for(meta.get("source", "") or meta.get("tool", ""), e.type)
     return {"id": e.id, "type": e.type, "value": e.value, "label": e.label,
             "confidence": round(e.confidence, 2), "confirmed": e.user_confirmed,
             "times_seen": e.times_seen, "metadata": meta, "explain": explain,
-            "children": children}
+            "children": children, "attack": tech}
 
 
 @app.get("/api/processes")
@@ -368,12 +464,65 @@ def api_set_firms(body: SecretIn):
     return {"ok": True, "firms": bool(k)}
 
 
+@app.post("/api/pwned")
+def api_pwned(body: SecretIn):
+    """Have I Been Pwned k-anonymity check — the password NEVER leaves this machine;
+    only the first 5 chars of its SHA-1 hash are sent, and the match is done locally."""
+    import hashlib
+    import urllib.request
+    pw = body.key or ""
+    if not pw:
+        return {"ok": False, "error": "empty"}
+    h = hashlib.sha1(pw.encode("utf-8")).hexdigest().upper()
+    prefix, suffix = h[:5], h[5:]
+    try:
+        req = urllib.request.Request("https://api.pwnedpasswords.com/range/" + prefix,
+                                     headers={"User-Agent": "RODE-Toolkit/1.0", "Add-Padding": "true"})
+        with urllib.request.urlopen(req, timeout=10) as r:
+            text = r.read().decode("utf-8", "replace")
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+    count = 0
+    for line in text.splitlines():
+        parts = line.split(":")
+        if len(parts) == 2 and parts[0].strip().upper() == suffix:
+            try:
+                count = int(parts[1].strip())
+            except Exception:
+                count = 1
+            break
+    return {"ok": True, "pwned": count > 0, "count": count}
+
+
 @app.get("/api/fires")
 def api_fires(bbox: str = "", days: int = 1):
     """Active wildfire detections (NASA FIRMS) for a bbox 'w,s,e,n'."""
     from .. import wildfire
     bb = bbox.split(",") if bbox else None
     return wildfire.fires(bb, days)
+
+
+@app.get("/api/data/output/info")
+def api_output_info():
+    """Size + file count of data/output (saved tool run text)."""
+    d = settings.DATA_DIR / "output"
+    files = [f for f in d.iterdir() if f.is_file()] if d.exists() else []
+    return {"count": len(files), "bytes": sum(f.stat().st_size for f in files)}
+
+
+@app.post("/api/data/output/clear")
+def api_output_clear():
+    """Delete saved tool-run output files in data/output (does not touch the DB)."""
+    d = settings.DATA_DIR / "output"
+    removed = 0
+    if d.exists():
+        for f in d.iterdir():
+            try:
+                if f.is_file():
+                    f.unlink(); removed += 1
+            except Exception:
+                pass
+    return {"ok": True, "removed": removed}
 
 
 @app.delete("/api/cams/{cid}")
