@@ -7,7 +7,7 @@ import { $, API, S, COLOR, escapeHtml, toast } from '../core.js';
 
 let viewer=null, baseLayer=null, labelLayer=null, hillLayer=null, camHandler=null, camDS=null, atlasKey=null;
 let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null, rainLayer=null;
-let firmsSaved=false, fireDS=null, fireTimer=null, oceanEntities=[];
+let firmsSaved=false, fireDS=null, fireTimer=null, oceanEntities=[], oceanLines=[], oceanLOD='', _hoverSat=null;
 let cams=[], camEntities=[], satEntities=[], overlayEntities=[], traceEntities=[], locateEntities=[];
 let importedSources=new Set();
 let spinOn=true, spinSpeed=1, lastInteract=0, modalOpen=false;
@@ -175,6 +175,7 @@ function initCesium(){
   setCinematic(cine);
   viewer.scene.preRender.addEventListener(()=>{
     updateCompass();
+    cullOccluded();
     if(satView){ followSat(); return; }
     if(!spinOn || modalOpen) return;
     if(Date.now()-lastInteract < 1500) return;
@@ -207,6 +208,12 @@ function initCesium(){
     else if(id._fire)showFire(id._fire);
     else if(id._hop)showHop(id._hop); else if(id._node)showNode(id._node); else if(id._loc)showLoc(id._loc);
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
+  // hover a satellite → show just its name (labels are hidden by default to declutter)
+  camHandler.setInputAction(m=>{
+    if(_hoverSat){ try{ _hoverSat.label.show=false; }catch(e){} _hoverSat=null; }
+    const p=viewer.scene.pick(m.endPosition);
+    if(p&&p.id&&p.id._sat&&p.id.label){ p.id.label.show=true; _hoverSat=p.id; }
+  }, Cesium.ScreenSpaceEventType.MOUSE_MOVE);
   viewer.camera.moveEnd.addEventListener(onViewChanged);
 }
 function setBase(kind){
@@ -316,28 +323,63 @@ const OCEAN_CURRENTS=[
   {name:'N. Equatorial Current', warm:true, pts:[[12,-18],[12,-40],[12,-62]]},
   {name:'S. Equatorial Current', warm:true, pts:[[-4,10],[-4,-15],[-4,-36]]},
 ];
+function _oceanCol(warm){ return Cesium.Color.fromCssColorString(warm?'#ff6b5a':'#4aa3ff').withAlpha(0.95); }
 function setOcean(on){ if(!viewer)return;
-  oceanEntities.forEach(e=>{ try{ viewer.entities.remove(e); }catch(_){} }); oceanEntities=[];
+  oceanEntities.forEach(e=>{ try{ viewer.entities.remove(e); }catch(_){} });
+  oceanEntities=[]; oceanLines=[]; oceanLOD='';
   const key=$('#oceanKey');
   if(!on){ if(key)key.style.display='none'; return; }
   OCEAN_CURRENTS.forEach(cur=>{
-    const col=Cesium.Color.fromCssColorString(cur.warm?'#ff6b5a':'#4aa3ff').withAlpha(0.92);
     const flat=[]; cur.pts.forEach(p=>{ flat.push(p[1], p[0], 60000); });   // lng,lat,height
     const line=viewer.entities.add({ polyline:{ positions:Cesium.Cartesian3.fromDegreesArrayHeights(flat),
-      width:9, arcType:Cesium.ArcType.GEODESIC,
-      material:new Cesium.PolylineArrowMaterialProperty(col) } });
-    oceanEntities.push(line);
+      width:8, arcType:Cesium.ArcType.GEODESIC, material:_oceanCol(cur.warm) } });
+    oceanEntities.push(line); oceanLines.push({line, warm:cur.warm});
     const mid=cur.pts[Math.floor(cur.pts.length/2)];
     const lbl=viewer.entities.add({ position:Cesium.Cartesian3.fromDegrees(mid[1],mid[0],60000),
       label:{ text:cur.name, font:'600 10px sans-serif',
         fillColor:Cesium.Color.fromCssColorString(cur.warm?'#ffb3aa':'#a9d4ff'),
         outlineColor:Cesium.Color.BLACK, outlineWidth:2, style:Cesium.LabelStyle.FILL_AND_OUTLINE,
         pixelOffset:new Cesium.Cartesian2(0,-10), scale:0.95,
-        translucencyByDistance:new Cesium.NearFarScalar(6.0e6,1.0,4.0e7,0.35),
+        translucencyByDistance:new Cesium.NearFarScalar(6.0e6,1.0,4.0e7,0.3),
         disableDepthTestDistance:Number.POSITIVE_INFINITY } });
     oceanEntities.push(lbl);
   });
+  updateOceanLOD(true);
   if(key)key.style.display='block';
+}
+// Zoomed out → soft glowing flow lines; zoomed in → explicit direction arrows.
+function updateOceanLOD(force){
+  if(!viewer || !oceanLines.length) return;
+  const mode = camH() < 3.2e6 ? 'arrow' : 'glow';
+  if(mode===oceanLOD && !force) return; oceanLOD=mode;
+  oceanLines.forEach(o=>{ if(!o.line || !o.line.polyline) return;
+    o.line.polyline.material = mode==='arrow'
+      ? new Cesium.PolylineArrowMaterialProperty(_oceanCol(o.warm))
+      : new Cesium.PolylineGlowMaterialProperty({ glowPower:0.28, taperPower:0.9, color:_oceanCol(o.warm) });
+    o.line.polyline.width = mode==='arrow' ? 9 : 14;
+  });
+}
+
+// ── horizon culling: hide icons on the FAR side of the globe (they use
+//    "always on top" so the depth buffer won't hide them). Runs throttled every
+//    frame so it keeps up with the auto-rotating globe.
+let _cullLast=0, _occluder=null;
+function cullOccluded(){
+  if(!viewer) return;
+  const now=performance.now(); if(now-_cullLast<110) return; _cullLast=now;
+  try{
+    if(!_occluder) _occluder=new Cesium.EllipsoidalOccluder(viewer.scene.globe.ellipsoid);
+    _occluder.cameraPosition=viewer.camera.positionWC;
+    const occ=_occluder, t=Cesium.JulianDate.now();
+    const cull=e=>{ if(!e||!e.position||!e.position.getValue) return;
+      let p; try{ p=e.position.getValue(t); }catch(_){ return; }
+      if(p) e.show=occ.isPointVisible(p); };
+    camEntities.forEach(cull);
+    if(fireDS) fireDS.entities.values.forEach(cull);
+    satEntities.forEach(s=>cull(s.e));
+    oceanEntities.forEach(cull);
+    locateEntities.forEach(cull); traceEntities.forEach(cull); overlayEntities.forEach(cull);
+  }catch(e){}
 }
 
 // ── compass: rotate the rose to match camera heading; draggable + resizable ──
@@ -639,6 +681,7 @@ async function loadCams(){
 }
 function onViewChanged(){
   clearTimeout(viewChangeTimer);
+  updateOceanLOD();
   const fl=$('#lyFire'); if(fl&&fl.checked){ clearTimeout(fireTimer); fireTimer=setTimeout(()=>loadFires(false),700); }
   viewChangeTimer=setTimeout(async ()=>{ if(!layers.cam)return;
     const imp=await autoImportForView(); if(imp){ try{ const d=await API('/cams'); cams=d.cameras||[]; }catch(e){} }
@@ -655,10 +698,9 @@ async function loadSats(){
       const e=viewer.entities.add({ billboard:{ image:SAT_ICON, width:30, height:30,
           verticalOrigin:Cesium.VerticalOrigin.CENTER,
           scaleByDistance:new Cesium.NearFarScalar(1.0e6,1.35,3.2e7,0.72) },
-        label:{text:s.name,font:'bold 10px monospace',fillColor:Cesium.Color.CYAN.withAlpha(0.75),
+        label:{text:s.name,font:'bold 10px monospace',fillColor:Cesium.Color.CYAN.withAlpha(0.9),
           outlineColor:Cesium.Color.BLACK,outlineWidth:2,style:Cesium.LabelStyle.FILL_AND_OUTLINE,
-          pixelOffset:new Cesium.Cartesian2(15,0),
-          translucencyByDistance:new Cesium.NearFarScalar(3.0e6,1.0,1.2e7,0.0)} });
+          pixelOffset:new Cesium.Cartesian2(15,0), show:false} });   // shown only on hover (declutter)
       e._sat={name:s.name,rec}; satEntities.push({rec,e}); });
     updateSats(); if(satTimer)clearInterval(satTimer); satTimer=setInterval(updateSats,2000); setMeta();
   }catch(e){}
@@ -808,7 +850,7 @@ function unmount(){
   if(viewer){ try{viewer.destroy();}catch(e){} viewer=null; }
   cams=[]; camEntities=[]; satEntities=[]; overlayEntities=[]; traceEntities=[]; locateEntities=[];
   importedSources=new Set(); baseLayer=labelLayer=hillLayer=rainLayer=null;
-  clearTimeout(fireTimer); fireDS=null; _compassRose=null; oceanEntities=[];
+  clearTimeout(fireTimer); fireDS=null; _compassRose=null; oceanEntities=[]; oceanLines=[]; _occluder=null;
 }
 function refresh(){ if(viewer) try{ loadOverlay(); }catch(e){} }
 export default { id:'atlas', label:'Atlas', short:'Atlas', mount, unmount, refresh };
