@@ -443,7 +443,53 @@ def api_cams_windy(body: WindyIn):
 def api_secrets():
     """Which secrets are configured (booleans only - never returns the values)."""
     from ..cams import get_secret
-    return {"windy": bool(get_secret("windy_key")), "firms": bool(get_secret("firms_key"))}
+    return {"windy": bool(get_secret("windy_key")), "firms": bool(get_secret("firms_key")),
+            "mapillary": bool(get_secret("mapillary_token"))}
+
+
+@app.post("/api/secrets/mapillary")
+def api_set_mapillary(body: SecretIn):
+    """Persist the free Mapillary access token in data/secrets.json (gitignored)."""
+    from ..cams import set_secret
+    k = body.key.strip()
+    set_secret("mapillary_token", k)
+    return {"ok": True, "mapillary": bool(k)}
+
+
+@app.get("/api/streetview")
+def api_streetview(lat: float, lng: float):
+    """Nearest Mapillary street-level image to a point (free, crowd-sourced)."""
+    from ..cams import get_secret
+    import urllib.request, urllib.parse
+    tok = get_secret("mapillary_token")
+    if not tok:
+        return {"ok": False, "error": "no Mapillary token set"}
+    d = 0.0025      # ~250 m box around the point
+    bbox = f"{lng - d},{lat - d},{lng + d},{lat + d}"
+    url = ("https://graph.mapillary.com/images?access_token=" + urllib.parse.quote(tok)
+           + "&fields=id,thumb_1024_url,captured_at,compass_angle,geometry&bbox=" + bbox + "&limit=10")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "RODE-Toolkit/1.0"})
+        with urllib.request.urlopen(req, timeout=12) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:140]}
+    imgs = data.get("data") or []
+    if not imgs:
+        return {"ok": True, "found": False}
+
+    def dist(im):
+        try:
+            c = im["geometry"]["coordinates"]
+            return (c[0] - lng) ** 2 + (c[1] - lat) ** 2
+        except Exception:
+            return 1e9
+    best = min(imgs, key=dist)
+    # the client token is a public browser token (like a maps key) — the interactive
+    # mapillary-js viewer needs it client-side; fine for a local single-user app.
+    return {"ok": True, "found": True, "id": best.get("id"), "thumb": best.get("thumb_1024_url"),
+            "captured_at": best.get("captured_at"), "compass": best.get("compass_angle"),
+            "token": tok}
 
 
 @app.post("/api/secrets/windy")

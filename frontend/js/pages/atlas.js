@@ -7,7 +7,7 @@ import { $, API, S, COLOR, escapeHtml, toast } from '../core.js';
 
 let viewer=null, baseLayer=null, labelLayer=null, hillLayer=null, camHandler=null, camDS=null, atlasKey=null;
 let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null, rainLayer=null;
-let firmsSaved=false, fireDS=null, fireTimer=null, _hoverSat=null;
+let firmsSaved=false, fireDS=null, fireTimer=null, _hoverSat=null, mapSaved=false;
 let camWindows=[], _camZ=20;
 let cams=[], camEntities=[], satEntities=[], overlayEntities=[], traceEntities=[], locateEntities=[];
 let importedSources=new Set();
@@ -38,7 +38,7 @@ function shell(){ return `
   <div id="atlasPanel">
     <div id="apHead">
       <svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--accent)"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
-      <b style="flex:1;font-size:11px;letter-spacing:.4px">GLOBE</b>
+      <b style="flex:1;font-size:11px;letter-spacing:.4px">GLOBE SETTINGS</b>
       <button id="apCollapse" title="Collapse / expand" style="background:transparent;border:0;color:var(--mut);cursor:pointer;font-size:13px;line-height:1;padding:0 4px">▾</button>
     </div>
     <div class="ap-search">
@@ -59,6 +59,7 @@ function shell(){ return `
       <label class="ap-row"><input type="checkbox" id="lyCam"/> <span>Public cameras</span></label>
       <div id="camLegend" style="display:none;padding:2px 0 2px 22px;font-size:10.5px;color:var(--mut);line-height:1.9"></div>
       <div class="ap-row" style="padding-left:22px;gap:5px"><input id="windyKey" placeholder="Windy key (optional)" style="flex:1;min-width:0;font-size:11px;padding:4px 7px"/><button class="sm" id="windyGo">Load</button></div>
+      <div class="ap-row" style="padding-left:22px;gap:5px" title="Free Mapillary token enables street view on cameras (mapillary.com → developer)"><input id="mapKey" placeholder="Mapillary token — street view" style="flex:1;min-width:0;font-size:11px;padding:4px 7px"/><button class="sm" id="mapGo">Save</button></div>
       <label class="ap-row"><input type="checkbox" id="lySat"/> <span>Satellites</span></label>
     </div>
 
@@ -305,10 +306,18 @@ function showFire(f){ setInfo('<b>🔥 Active fire</b><div class="muted" style="
 // ── horizon culling: hide icons on the FAR side of the globe (they use
 //    "always on top" so the depth buffer won't hide them). Runs throttled every
 //    frame so it keeps up with the auto-rotating globe.
+// Raster place-labels can't reflow, so magnifying them at close zoom just blurs
+// the town name over the map. Fade the label layer out as you zoom in.
+function fadeLabels(){ if(!labelLayer)return;
+  const h=camH();
+  let a=(h-20000)/(350000-20000); a=Math.max(0,Math.min(1,a));   // full >350km, gone <20km
+  try{ labelLayer.alpha=a; }catch(e){}
+}
 let _cullLast=0, _occluder=null;
 function cullOccluded(){
   if(!viewer) return;
   const now=performance.now(); if(now-_cullLast<200) return; _cullLast=now;
+  fadeLabels();
   try{
     if(!_occluder) _occluder=new Cesium.EllipsoidalOccluder(viewer.scene.globe.ellipsoid);
     _occluder.cameraPosition=viewer.camera.positionWC;
@@ -748,6 +757,7 @@ function openCamWindow(cam){
   win.innerHTML='<div class="cw-bar" style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#141a22;cursor:grab;flex:0 0 auto;user-select:none">'+
     '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:#dbe3ea">'+escapeHtml(cam.name||'camera')+'</span>'+
     '<span class="cw-stat" style="font-size:9px;color:#8b97a5"></span>'+
+    '<button class="cw-sv" title="Street view of this spot (Mapillary)" style="background:transparent;border:0;color:#9fb0c0;cursor:pointer;font-size:13px;line-height:1;padding:0 3px">🛣</button>'+
     '<button class="cw-x" title="Close" style="background:transparent;border:0;color:#c9d3df;cursor:pointer;font-size:16px;line-height:1;padding:0 3px">&times;</button></div>'+
     '<div class="cw-body" style="flex:1;min-height:0;background:#000;position:relative"></div>';
   host.appendChild(win);
@@ -772,6 +782,7 @@ function openCamWindow(cam){
     const tick=()=>{ if(document.hidden)return; img.src='/api/cams/'+cam.id+'/snapshot?t='+Date.now(); }; tick(); rec.timer=setInterval(tick,2500);
   } else { body.innerHTML='<div style="color:#8b97a5;padding:16px;font-size:12px">No feed set for this point.</div>'; }
   win.querySelector('.cw-x').onclick=()=>closeCamWindow(rec);
+  const sv=win.querySelector('.cw-sv'); if(sv)sv.onclick=(e)=>{ e.stopPropagation(); openStreetView(+cam.lat,+cam.lng,cam.name); };
   win.addEventListener('mousedown',()=>{ win.style.zIndex=(++_camZ); });
   bar.addEventListener('mousedown',e=>{ if(e.target.classList.contains('cw-x'))return; e.preventDefault();
     const r=win.getBoundingClientRect(), ox=e.clientX-r.left, oy=e.clientY-r.top; bar.style.cursor='grabbing';
@@ -789,6 +800,61 @@ function closeCamWindow(rec){
   camWindows=camWindows.filter(w=>w!==rec);
 }
 function closeAllCamWindows(){ camWindows.slice().forEach(closeCamWindow); }
+
+// ── Mapillary street view (free crowd-sourced imagery) ──
+async function initMapillary(){ try{ const st=await API('/secrets'); mapSaved=!!(st&&st.mapillary); }catch(e){}
+  const mk=$('#mapKey'); if(mk&&mapSaved) mk.placeholder='Mapillary token saved ✓'; }
+let _mlyLoad=null;
+function loadMapillaryJs(){
+  if(window.mapillary&&window.mapillary.Viewer) return Promise.resolve();
+  if(_mlyLoad) return _mlyLoad;
+  _mlyLoad=new Promise((resolve,reject)=>{
+    const css=document.createElement('link'); css.rel='stylesheet';
+    css.href='https://cdn.jsdelivr.net/npm/mapillary-js@4.1.2/dist/mapillary.css'; document.head.appendChild(css);
+    const s=document.createElement('script'); s.src='https://cdn.jsdelivr.net/npm/mapillary-js@4.1.2/dist/mapillary.js';
+    s.onload=()=>resolve(); s.onerror=()=>reject(new Error('load failed')); document.head.appendChild(s);
+  });
+  return _mlyLoad;
+}
+async function openStreetView(lat,lng,name){
+  const W=Math.min(560,Math.max(360,Math.round(window.innerWidth*0.34))), H=Math.round(W*0.7);
+  const win=document.createElement('div');
+  win.style.cssText='position:fixed;z-index:'+(++_camZ)+';left:'+Math.round((window.innerWidth-W)/2)+'px;top:'+Math.round((window.innerHeight-H)/2)+'px;width:'+W+'px;height:'+H+'px;'+
+    'background:#0b0e13;border:1px solid rgba(255,255,255,.18);border-radius:10px;overflow:hidden;resize:both;min-width:220px;min-height:170px;max-width:96vw;max-height:90vh;box-shadow:0 18px 50px rgba(0,0,0,.6);display:flex;flex-direction:column';
+  win.innerHTML='<div class="cw-bar" style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#141a22;cursor:grab;flex:0 0 auto;user-select:none">'+
+    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:#dbe3ea">🛣 Street view — '+escapeHtml(name||'')+'</span>'+
+    '<span class="cw-stat" style="font-size:9px;color:#8b97a5">Mapillary</span>'+
+    '<button class="cw-x" title="Close" style="background:transparent;border:0;color:#c9d3df;cursor:pointer;font-size:16px;line-height:1;padding:0 3px">&times;</button></div>'+
+    '<div class="cw-body" style="flex:1;min-height:0;background:#000;position:relative;display:flex;align-items:center;justify-content:center;color:#8b97a5;font-size:12px;text-align:center;padding:14px">loading…</div>';
+  document.body.appendChild(win);
+  const body=win.querySelector('.cw-body'), bar=win.querySelector('.cw-bar');
+  const closeSV=()=>{ try{ if(win._mly)win._mly.remove(); }catch(e){} try{ if(win._ro)win._ro.disconnect(); }catch(e){} try{ win.remove(); }catch(e){} };
+  win.querySelector('.cw-x').onclick=closeSV;
+  win.addEventListener('mousedown',()=>{ win.style.zIndex=(++_camZ); });
+  bar.addEventListener('mousedown',e=>{ if(e.target.classList.contains('cw-x'))return; e.preventDefault();
+    const r=win.getBoundingClientRect(), ox=e.clientX-r.left, oy=e.clientY-r.top; bar.style.cursor='grabbing';
+    const mv=ev=>{ win.style.left=Math.max(0,ev.clientX-ox)+'px'; win.style.top=Math.max(0,ev.clientY-oy)+'px'; };
+    const up=()=>{ bar.style.cursor='grab'; document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up); });
+  if(!mapSaved){ body.innerHTML='Add a free <b>Mapillary token</b> in Globe Settings (under the cameras) to enable street view.<br><span style="color:#6ea8fe">mapillary.com → developer</span>'; return; }
+  let d; try{ d=await (await fetch('/api/streetview?lat='+lat+'&lng='+lng)).json(); }catch(e){ body.textContent='street view request failed'; return; }
+  if(!d||!d.ok){ body.textContent='Mapillary: '+((d&&d.error)||'error'); return; }
+  if(!d.found){ body.textContent='No street imagery near this spot yet (Mapillary coverage is thinner off major roads).'; return; }
+  const cap=d.captured_at?new Date(d.captured_at).toLocaleDateString():'';
+  const s=win.querySelector('.cw-stat'); if(s)s.textContent='Mapillary'+(cap?' · '+cap:'');
+  body.style.display='block'; body.style.padding='0'; body.innerHTML='<div style="color:#8b97a5;padding:14px;font-size:12px">loading interactive view…</div>';
+  try{
+    await loadMapillaryJs();
+    if(!window.mapillary||!window.mapillary.Viewer) throw new Error('viewer unavailable');
+    body.innerHTML='';
+    win._mly=new window.mapillary.Viewer({ accessToken:d.token, container:body, imageId:d.id, component:{cover:false} });
+    if(window.ResizeObserver){ win._ro=new ResizeObserver(()=>{ try{ win._mly&&win._mly.resize(); }catch(e){} }); win._ro.observe(win); }
+  }catch(e){
+    body.style.position='relative';
+    body.innerHTML='<img alt="street" src="'+d.thumb+'" style="width:100%;height:100%;object-fit:contain;background:#000"/>'+
+      '<div style="position:absolute;bottom:6px;left:8px;font-size:10px;color:#cdd6e0;background:rgba(0,0,0,.55);padding:2px 6px;border-radius:4px">static image · interactive viewer needs internet</div>';
+  }
+}
 
 function mount(root){
   root.innerHTML=shell();
@@ -819,7 +885,13 @@ function mount(root){
       firmsSaved=true; if(fk){ fk.value=''; fk.placeholder='FIRMS key saved ✓'; } toast('FIRMS key saved','ok');
       const lf=$('#lyFire'); if(lf&&!lf.checked)lf.checked=true; setFires(true); }
     else if(!firmsSaved){ toast('Paste your free FIRMS key first','warn'); } };
+  const mk=$('#mapKey'); if(mk){ mk.onkeydown=ev=>{ if(ev.key==='Enter') $('#mapGo').click(); }; }
+  const mg=$('#mapGo'); if(mg) mg.onclick=async ()=>{ const v=(mk&&mk.value.trim())||'';
+    if(!v){ toast('Paste your free Mapillary token first','warn'); return; }
+    try{ await fetch('/api/secrets/mapillary',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:v})}); }catch(e){}
+    mapSaved=true; if(mk){ mk.value=''; mk.placeholder='Mapillary token saved ✓'; } toast('Mapillary token saved — click 🛣 on any camera','ok'); };
   initFirms();
+  initMapillary();
   initCompass();
   initPanel();
   try{ const c=localStorage.getItem('rode.atlasCine'); if(c!==null&&$('#cine'))$('#cine').checked=c==='1'; }catch(e){}

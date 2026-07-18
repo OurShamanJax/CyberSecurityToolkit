@@ -13,7 +13,7 @@ const HTML=`
     <div class="gfilter" id="gfilter"></div>
     <div class="gtools">
       <button class="sm" id="lensGraph">Graph</button>
-      <button class="sm ghost" id="lensMap">Map</button>
+      <button class="sm ghost" id="lensMap">Globe</button>
       <button class="sm ghost" id="lensTimeline">Timeline</button>
       <span id="graphtools" style="display:inline-flex;gap:7px;margin-left:4px">
         <button class="sm ghost" id="fitBtn" title="Fit to view"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Fit</button>
