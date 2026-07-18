@@ -5,13 +5,14 @@
 // default). Free/no-account sources (ESRI imagery, ip-api.com, Celestrak).
 import { $, API, S, COLOR, escapeHtml, toast } from '../core.js';
 
-let viewer=null, baseLayer=null, labelLayer=null, hillLayer=null, camHandler=null, atlasKey=null;
+let viewer=null, baseLayer=null, labelLayer=null, hillLayer=null, camHandler=null, camDS=null, atlasKey=null;
 let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null;
 let cams=[], camEntities=[], satEntities=[], overlayEntities=[], traceEntities=[], locateEntities=[];
 let importedSources=new Set();
 let spinOn=true, spinSpeed=1, lastInteract=0, modalOpen=false;
 let satView=false, satViewSat=null, satViewAlt=700000, satSpeed=0.25, satViewTime=null, satLastFrame=0;
 const layers={ inv:true, trace:true, cam:false, sat:false };
+function saveLayers(){ try{ localStorage.setItem('rode.atlasLayers', JSON.stringify(layers)); }catch(e){} }
 const ESRI='https://services.arcgisonline.com/ArcGIS/rest/services/';
 function esri(path){ return new Cesium.ArcGisMapServerImageryProvider({url:ESRI+path+'/MapServer'}); }
 function typeColor(t){ return COLOR[t] || '#5aa9e6'; }
@@ -28,6 +29,9 @@ function shell(){ return `
       <input id="locInput" placeholder="locate IP / domain — e.g. 1.1.1.1"/>
       <button class="sm primary" id="locGo" title="Locate"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
     </div>
+    <div class="ap-row" style="gap:6px"><button class="sm ghost" id="homeBtn" style="flex:1">Home view</button><button class="sm ghost" id="clearBtn" style="flex:1">Clear pins</button></div>
+    <label class="ap-row" title="Camera auto-orbit only — satellites keep moving on real time"><input type="checkbox" id="spin" checked/> <span>Auto-rotate globe</span>
+      <select id="spd" class="sm" style="font-size:10px;padding:2px 4px"><option value="1">1×</option><option value="600">10m/s</option><option value="3600">1h/s</option><option value="21600">6h/s</option></select></label>
 
     <div class="ap-sec"><div class="ap-lbl">Layers</div>
       <label class="ap-row"><input type="checkbox" id="lyInv" checked/> <span>Investigation</span><span class="ap-c" id="cInv"></span></label>
@@ -50,8 +54,6 @@ function shell(){ return `
         <label class="ap-row"><input type="checkbox" id="hill"/> <span>Terrain shading (hillshade)</span></label>
         <label class="ap-row"><input type="checkbox" id="labels" checked/> <span>Labels</span></label>
         <label class="ap-row"><input type="checkbox" id="sun" checked/> <span>Sunlight day/night</span></label>
-        <label class="ap-row"><input type="checkbox" id="spin" checked/> <span>Auto-spin</span></label>
-        <select id="spd" class="sm" style="width:100%;margin-top:4px"><option value="1">real-time spin</option><option value="600">10 min/s</option><option value="3600">1 hr/s</option><option value="21600">6 hr/s</option></select>
       </div>
     </div>
 
@@ -105,9 +107,22 @@ function initCesium(){
     if(!satView) return; e.preventDefault();
     satViewAlt=Math.max(150, Math.min(satViewAlt*(e.deltaY>0?1.15:0.86), 9000000));
   }, {passive:false});
+  camDS=new Cesium.CustomDataSource('cams'); viewer.dataSources.add(camDS);
+  const cl=camDS.clustering; cl.enabled=true; cl.pixelRange=42; cl.minimumClusterSize=4;
+  cl.clusterEvent.addEventListener((ents,cluster)=>{
+    cluster.label.show=true; cluster.label.text=String(ents.length);
+    cluster.label.font='bold 11px sans-serif'; cluster.label.fillColor=Cesium.Color.WHITE;
+    cluster.label.disableDepthTestDistance=Number.POSITIVE_INFINITY;
+    cluster.point.show=true; cluster.point.pixelSize=Math.min(30, 14+ents.length*0.25);
+    cluster.point.color=Cesium.Color.fromCssColorString('#2f7d57');
+    cluster.point.outlineColor=Cesium.Color.BLACK; cluster.point.outlineWidth=1;
+    cluster.point.disableDepthTestDistance=Number.POSITIVE_INFINITY;
+    if(cluster.billboard) cluster.billboard.show=false;
+  });
   camHandler=new Cesium.ScreenSpaceEventHandler(viewer.scene.canvas);
   camHandler.setInputAction(m=>{ const p=viewer.scene.pick(m.position); if(!p||!p.id)return;
     const id=p.id;
+    if(Array.isArray(id)){ try{ viewer.flyTo(id,{duration:1.2}); }catch(e){} return; }
     if(id._cam)openCam(id._cam); else if(id._sat)openSat(id._sat);
     else if(id._hop)showHop(id._hop); else if(id._node)showNode(id._node); else if(id._loc)showLoc(id._loc);
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
@@ -291,13 +306,13 @@ async function autoImportForView(){
   if(await queryWindy(false)) did=true;
   return did;
 }
-function clearCamEntities(){ camEntities.forEach(e=>{try{viewer.entities.remove(e);}catch(_){}}); camEntities=[]; }
+function clearCamEntities(){ if(camDS)camDS.entities.removeAll(); camEntities=[]; }
 function addCamEntities(){
   if(!viewer)return; clearCamEntities();
   if(!layers.cam){ setMeta(); return; }
   const v=viewRectDeg();
   cams.filter(c=>c.lat&&c.lng&&inV(c,v)).forEach(c=>{
-    const e=viewer.entities.add({ position:Cesium.Cartesian3.fromDegrees(+c.lng,+c.lat),
+    const e=camDS.entities.add({ position:Cesium.Cartesian3.fromDegrees(+c.lng,+c.lat),
       point:{pixelSize:8,color:Cesium.Color.fromCssColorString(c.url?'#5fbf8a':'#e0a24b'),outlineColor:Cesium.Color.BLACK,outlineWidth:1,disableDepthTestDistance:Number.POSITIVE_INFINITY} });
     e._cam=c; camEntities.push(e); });
   setMeta();
@@ -377,7 +392,7 @@ function mediaOf(cam){ const v=cam.video||(cam.url&&/\.mp4(\?|$)/i.test(cam.url)
   const hls=(cam.url&&/\.m3u8(\?|$)/i.test(cam.url))?cam.url:''; return {v,hls,img:(!v&&!hls&&cam.url)?cam.url:''}; }
 function openCam(cam){
   $('#cmTitle').textContent=cam.name;
-  $('#cmSub').textContent=`${cam.type} · ${(+cam.lat).toFixed(3)}, ${(+cam.lng).toFixed(3)} ${cam.country||''}`;
+  $('#cmSub').textContent=[cam.type, cam.place||cam.country, `${(+cam.lat).toFixed(3)}, ${(+cam.lng).toFixed(3)}`].filter(Boolean).join(' · ');
   const body=$('#cmBody'), m=mediaOf(cam);
   const foot=`<div style="margin-top:8px;display:flex;gap:8px;align-items:center"><span class="muted" id="cmStat"></span><div class="spacer"></div><button class="sm danger" id="cmDel">Delete feed</button></div>`;
   if(m.v){ body.innerHTML=`<video id="cmVid" autoplay loop muted playsinline controls style="width:100%;border-radius:8px;background:#000;min-height:220px"></video>`+foot;
@@ -413,10 +428,10 @@ function mount(root){
   $('#hill').onchange=e=>setHill(e.target.checked);
   $('#labels').onchange=e=>setLabels(e.target.checked);
   $('#sun').onchange=e=>{ if(viewer)viewer.scene.globe.enableLighting=e.target.checked; };
-  $('#spin').onchange=e=>{ spinOn=e.target.checked; };
+  $('#spin').onchange=e=>{ spinOn=e.target.checked; try{ localStorage.setItem('rode.atlasSpin', spinOn?'1':'0'); }catch(_){} };
   $('#spd').onchange=e=>{ spinSpeed=+e.target.value||1; };
-  $('#lyInv').onchange=e=>{ layers.inv=e.target.checked; loadOverlay(); };
-  $('#lyTrace').onchange=e=>{ layers.trace=e.target.checked; if(!layers.trace)clearTrace(); };
+  $('#lyInv').onchange=e=>{ layers.inv=e.target.checked; saveLayers(); loadOverlay(); };
+  $('#lyTrace').onchange=e=>{ layers.trace=e.target.checked; saveLayers(); if(!layers.trace)clearTrace(); };
   const wk=$('#windyKey'); if(wk){ wk.onkeydown=e=>{ if(e.key==='Enter') $('#windyGo').click(); }; }
   initWindy();
   const wg=$('#windyGo'); if(wg) wg.onclick=async ()=>{
@@ -427,12 +442,19 @@ function mount(root){
     if(!layers.cam){ layers.cam=true; const c=$('#lyCam'); if(c)c.checked=true; }
     const ok=await queryWindy(true);
     if(ok){ try{ const d=await API('/cams'); cams=d.cameras||[]; }catch(e){} addCamEntities(); } };
-  $('#lyCam').onchange=e=>{ layers.cam=e.target.checked; if(layers.cam)loadCams(); else { clearCamEntities(); importedSources.clear(); } setMeta(); };
-  $('#lySat').onchange=e=>{ layers.sat=e.target.checked; if(layers.sat)loadSats(); else clearSats(); };
+  $('#lyCam').onchange=e=>{ layers.cam=e.target.checked; saveLayers(); if(layers.cam)loadCams(); else { clearCamEntities(); importedSources.clear(); } setMeta(); };
+  $('#lySat').onchange=e=>{ layers.sat=e.target.checked; saveLayers(); if(layers.sat)loadSats(); else clearSats(); };
   $('#svExit').onclick=exitSatView; $('#svExitTop').onclick=exitSatView; $('#svZoomIn').onclick=()=>svZoom(true); $('#svZoomOut').onclick=()=>svZoom(false);
   $('#svSpeed').onchange=e=>{ satSpeed=+e.target.value||0.25; };
   atlasKey=e=>{ if(e.key==='Escape'&&satView){ e.preventDefault(); exitSatView(); } };
   document.addEventListener('keydown', atlasKey);
+  $('#homeBtn').onclick=()=>{ if(viewer){ try{ viewer.camera.flyHome(1.5); }catch(e){} } };
+  $('#clearBtn').onclick=()=>{ clearTrace(); clearLocate(); setInfo('Click a pin, or locate / trace a target.'); };
+  try{ const sv=JSON.parse(localStorage.getItem('rode.atlasLayers')||'null'); if(sv) Object.assign(layers,sv); }catch(e){}
+  try{ const sp=localStorage.getItem('rode.atlasSpin'); if(sp!==null){ spinOn=sp==='1'; const sc=$('#spin'); if(sc)sc.checked=spinOn; } }catch(e){}
+  $('#lyInv').checked=layers.inv; $('#lyTrace').checked=layers.trace; $('#lyCam').checked=layers.cam; $('#lySat').checked=layers.sat;
+  if(layers.cam) loadCams();
+  if(layers.sat) loadSats();
   loadOverlay();
 }
 function unmount(){

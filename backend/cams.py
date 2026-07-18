@@ -163,8 +163,9 @@ def import_windy(lat, lng, radius_km, key: str) -> dict:
             if not img or img in seen or not (la and lo):
                 continue
             nid += 1; seen.add(img)
+            place = ", ".join([str(x) for x in (loc.get("city"), loc.get("region"), loc.get("country")) if x])
             rows.append({"id": nid, "name": str(nm)[:80], "lat": la, "lng": lo,
-                         "country": loc.get("country") or "", "type": "webcam",
+                         "country": loc.get("country") or "", "place": place, "type": "webcam",
                          "url": img, "video": "", "stream": "jpg", "src": "windy"})
             added += 1
         except Exception:
