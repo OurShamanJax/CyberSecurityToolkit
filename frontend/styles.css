@@ -345,23 +345,41 @@ body.compact .page-body{padding:14px}
 
 
 /* ── Atlas v2 panel ── */
-#atlasPanel{position:absolute;top:12px;left:12px;z-index:12;width:238px;max-height:calc(100% - 24px);overflow:auto;
-  background:rgba(13,17,23,.9);border:1px solid var(--line);border-radius:11px;padding:11px;display:flex;flex-direction:column;gap:13px}
-#apHead{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none;margin:-2px -2px 0;padding:2px 3px}
+#atlasPanel{position:absolute;top:12px;left:12px;z-index:12;width:244px;max-height:calc(100% - 24px);overflow:auto;
+  background:rgba(13,17,23,.92);border:1px solid var(--line);border-radius:11px;padding:11px;display:flex;flex-direction:column;gap:9px}
+#apHead{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none;margin:-2px -2px 2px;padding:2px 3px}
 #atlasPanel.collapsed{width:auto;gap:0;overflow:visible}
 #atlasPanel.collapsed>:not(#apHead){display:none}
 #atlasPanel .ap-search{display:flex;gap:6px}
 #atlasPanel .ap-search input{flex:1;font-size:12px;padding:6px 9px;min-width:0}
+.ap-quick{display:flex;gap:6px}
+.ap-quick button{flex:1}
 .ap-sec{display:flex;flex-direction:column;gap:6px}
 .ap-lbl{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--dim)}
-.ap-toggle{cursor:pointer;user-select:none}
 .ap-row{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text);cursor:pointer}
 .ap-row input{width:auto;flex:0 0 auto}
 .ap-row span:first-of-type{flex:1}
+.ap-standalone{padding:1px 2px}
 .ap-c{color:var(--accent);font-size:11px;font-weight:600}
 .ap-info{font-size:12px;line-height:1.5;max-height:240px;overflow:auto}
 .ap-info button{margin-top:4px}
 .ap-meta{font-size:11px;color:var(--dim);border-top:1px solid var(--line);padding-top:7px;min-height:8px}
+/* collapsible accordion cards */
+.ap-group{border:1px solid var(--line);border-radius:9px;background:rgba(255,255,255,.02);overflow:hidden}
+.ap-group>summary{list-style:none;display:flex;align-items:center;gap:8px;padding:8px 10px;cursor:pointer;user-select:none;
+  font-size:10.5px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--dim)}
+.ap-group>summary::-webkit-details-marker{display:none}
+.ap-group>summary .ic{width:13px;height:13px;flex:0 0 auto;color:var(--mut)}
+.ap-group>summary::after{content:'›';margin-left:auto;font-size:15px;line-height:1;color:var(--mut);transition:transform .15s}
+.ap-group[open]>summary::after{transform:rotate(90deg)}
+.ap-group[open]>summary{color:var(--text);border-bottom:1px solid var(--line)}
+.ap-group[open]>summary .ic{color:var(--accent)}
+.ap-group:hover>summary{color:var(--text)}
+.ap-body{display:flex;flex-direction:column;gap:7px;padding:9px 10px}
+.ap-body>#camLegend{font-size:10.5px;color:var(--mut);line-height:1.9;padding-left:22px}
+.ap-key{display:flex;gap:5px;padding-left:22px}
+.ap-key input{flex:1;min-width:0;font-size:11px;padding:4px 7px}
+.ap-note{font-size:10px;color:var(--dim);line-height:1.5;padding-left:2px}
 .tr-list{display:flex;flex-direction:column;gap:1px;margin-top:5px;max-height:180px;overflow:auto}
 .tr-hop{display:flex;align-items:baseline;gap:6px;font-size:11px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,.05)}
 .tr-n{color:var(--dim);flex:0 0 24px}

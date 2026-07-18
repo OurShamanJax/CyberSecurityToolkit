@@ -50,43 +50,55 @@ function shell(){ return `
       <input id="locInput" placeholder="locate IP / domain — e.g. 1.1.1.1"/>
       <button class="sm" id="locGo" title="Locate"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
     </div>
-    <div class="ap-row" style="gap:6px"><button class="sm ghost" id="homeBtn" style="flex:1">Home view</button><button class="sm ghost" id="clearBtn" style="flex:1">Clear pins</button></div>
-    <label class="ap-row" title="Camera auto-orbit only — satellites keep moving on real time"><input type="checkbox" id="spin" checked/> <span>Auto-rotate globe</span>
+    <div class="ap-quick"><button class="sm ghost" id="homeBtn">Home view</button><button class="sm ghost" id="clearBtn">Clear pins</button></div>
+    <label class="ap-row ap-standalone" title="Camera auto-orbit only — satellites keep moving on real time"><input type="checkbox" id="spin" checked/> <span>Auto-rotate globe</span>
       <select id="spd" class="sm" style="font-size:10px;padding:2px 4px"><option value="1">1×</option><option value="600">10m/s</option><option value="3600">1h/s</option><option value="21600">6h/s</option></select></label>
 
-    <div class="ap-sec"><div class="ap-lbl">Layers</div>
-      <label class="ap-row"><input type="checkbox" id="lyInv" checked/> <span>Investigation</span><span class="ap-c" id="cInv"></span></label>
-      <label class="ap-row"><input type="checkbox" id="lyTrace" checked/> <span>Traceroute paths</span></label>
-      <label class="ap-row"><input type="checkbox" id="lyCam"/> <span>Public cameras</span></label>
-      <div id="camLegend" style="display:none;padding:2px 0 2px 22px;font-size:10.5px;color:var(--mut);line-height:1.9"></div>
-      <div class="ap-row" style="padding-left:22px;gap:5px"><input id="windyKey" placeholder="Windy key (optional)" style="flex:1;min-width:0;font-size:11px;padding:4px 7px"/><button class="sm" id="windyGo">Load</button></div>
-      <div class="ap-row" style="padding-left:22px;gap:5px" title="Free Mapillary token enables street view on cameras (mapillary.com → developer)"><input id="mapKey" placeholder="Mapillary token — street view" style="flex:1;min-width:0;font-size:11px;padding:4px 7px"/><button class="sm" id="mapGo">Save</button></div>
-      <label class="ap-row" title="Click anywhere on a road to open street view there (green dots = where imagery exists)"><input type="checkbox" id="lySv"/> <span>🛣 Street view mode</span></label>
-      <label class="ap-row"><input type="checkbox" id="lySat"/> <span>Satellites</span></label>
-    </div>
-
-    <div class="ap-sec"><div class="ap-lbl">Traceroute</div>
-      <div class="ap-search">
-        <input id="trInput" placeholder="host / IP to trace"/>
-        <button class="sm" id="trGo"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M4 20 20 4M14 4h6v6"/></svg></button>
+    <details class="ap-group" open>
+      <summary><svg class="ic" viewBox="0 0 24 24"><path d="M12 2 2 7l10 5 10-5z"/><path d="M2 17l10 5 10-5M2 12l10 5 10-5"/></svg>Layers</summary>
+      <div class="ap-body">
+        <label class="ap-row"><input type="checkbox" id="lyInv" checked/> <span>Investigation</span><span class="ap-c" id="cInv"></span></label>
+        <label class="ap-row"><input type="checkbox" id="lyTrace" checked/> <span>Traceroute paths</span></label>
+        <label class="ap-row"><input type="checkbox" id="lyCam"/> <span>Public cameras</span></label>
+        <div id="camLegend" style="display:none"></div>
+        <div class="ap-key"><input id="windyKey" placeholder="Windy key (optional)"/><button class="sm" id="windyGo">Load</button></div>
+        <div class="ap-key" title="Free Mapillary token enables street view on cameras (mapillary.com → developer)"><input id="mapKey" placeholder="Mapillary token — street view"/><button class="sm" id="mapGo">Save</button></div>
+        <label class="ap-row" title="Click anywhere on a road to open street view there (green dots = where imagery exists)"><input type="checkbox" id="lySv"/> <span>🛣 Street view mode</span></label>
+        <label class="ap-row"><input type="checkbox" id="lySat"/> <span>Satellites</span></label>
       </div>
-    </div>
+    </details>
 
-    <div class="ap-sec"><div class="ap-lbl ap-toggle" id="globeOptsHdr">Globe options ▸</div>
-      <div id="globeOpts" style="display:none">
-        <select id="base" class="sm" style="width:100%;margin-bottom:6px"><option value="satellite">Satellite imagery</option><option value="streets">Streets</option></select>
+    <details class="ap-group">
+      <summary><svg class="ic" viewBox="0 0 24 24"><path d="M17 18a5 5 0 0 0-9-3 4 4 0 0 0-4 4 3 3 0 0 0 3 3h9a3 3 0 0 0 1-6z"/><path d="M12 2v3M4 6l2 2M20 6l-2 2"/></svg>Living Earth</summary>
+      <div class="ap-body">
+        <label class="ap-row" title="Live global precipitation radar (RainViewer, free)"><input type="checkbox" id="lyRain"/> <span>Precipitation — live radar</span></label>
+        <label class="ap-row" title="Active wildfire detections — NASA FIRMS (free key)"><input type="checkbox" id="lyFire"/> <span>Wildfires — active</span></label>
+        <div class="ap-key"><input id="firmsKey" placeholder="FIRMS key (free, optional)"/><button class="sm" id="firmsGo">Save</button></div>
+        <div class="ap-note">Day/night &amp; seasons already track real time.</div>
+      </div>
+    </details>
+
+    <details class="ap-group">
+      <summary><svg class="ic" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>Map style</summary>
+      <div class="ap-body">
+        <select id="base" class="sm" style="width:100%"><option value="satellite">Satellite imagery</option><option value="streets">Streets</option></select>
         <label class="ap-row"><input type="checkbox" id="hill"/> <span>Terrain shading (hillshade)</span></label>
         <label class="ap-row" title="Town/place names — fade out as you zoom in"><input type="checkbox" id="labels" checked/> <span>Place names</span></label>
         <label class="ap-row" title="Road/street names — fade in as you zoom to street level"><input type="checkbox" id="roads" checked/> <span>Road names</span></label>
         <label class="ap-row"><input type="checkbox" id="sun" checked/> <span>Sunlight day/night</span></label>
         <label class="ap-row" title="HDR + anti-aliasing — richer light &amp; smoother edges. Turn off if the globe feels sluggish."><input type="checkbox" id="cine" checked/> <span>Cinematic quality (HDR)</span></label>
-        <div class="ap-lbl" style="margin-top:9px">Living Earth</div>
-        <label class="ap-row" title="Live global precipitation radar (RainViewer, free)"><input type="checkbox" id="lyRain"/> <span>Precipitation — live radar</span></label>
-        <label class="ap-row" title="Active wildfire detections — NASA FIRMS (free key)"><input type="checkbox" id="lyFire"/> <span>Wildfires — active (NASA FIRMS)</span></label>
-        <div class="ap-row" style="padding-left:22px;gap:5px"><input id="firmsKey" placeholder="FIRMS key (free, optional)" style="flex:1;min-width:0;font-size:11px;padding:4px 7px"/><button class="sm" id="firmsGo">Save</button></div>
-        <div class="muted" style="font-size:10px;padding-left:22px;line-height:1.5">Day/night &amp; seasons already track real time.</div>
       </div>
-    </div>
+    </details>
+
+    <details class="ap-group">
+      <summary><svg class="ic" viewBox="0 0 24 24"><path d="M4 20 20 4M14 4h6v6"/></svg>Traceroute</summary>
+      <div class="ap-body">
+        <div class="ap-search">
+          <input id="trInput" placeholder="host / IP to trace"/>
+          <button class="sm" id="trGo"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M4 20 20 4M14 4h6v6"/></svg></button>
+        </div>
+      </div>
+    </details>
 
     <div class="ap-sec" id="atlasInfoSec"><div class="ap-lbl">Selection</div>
       <div id="atlasInfo" class="ap-info muted">Click a pin, or locate / trace a target.</div>
@@ -923,7 +935,6 @@ function mount(root){
   $('#locInput').onkeydown=e=>{ if(e.key==='Enter') doLocate(e.target.value); };
   $('#trGo').onclick=()=>doTrace($('#trInput').value);
   $('#trInput').onkeydown=e=>{ if(e.key==='Enter') doTrace(e.target.value); };
-  $('#globeOptsHdr').onclick=()=>{ const o=$('#globeOpts'); const open=o.style.display==='none'; o.style.display=open?'block':'none'; $('#globeOptsHdr').textContent='Globe options '+(open?'▾':'▸'); };
   if(typeof Cesium==='undefined'){
     $('#cesiumViz').style.display='none';
     $('#glbFallback').innerHTML='<div class="muted" style="padding:40px 24px">The 3D globe engine (CesiumJS) didn\'t load — it needs internet access to its CDN. The rest of R.O.D.E works offline; reconnect and reload this tab.</div>';
