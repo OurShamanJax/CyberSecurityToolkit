@@ -6,7 +6,7 @@
 import { $, API, S, COLOR, escapeHtml, toast } from '../core.js';
 
 let viewer=null, baseLayer=null, labelLayer=null, hillLayer=null, camHandler=null, camDS=null, atlasKey=null;
-let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null;
+let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null, cloudLayer=null, rainLayer=null;
 let cams=[], camEntities=[], satEntities=[], overlayEntities=[], traceEntities=[], locateEntities=[];
 let importedSources=new Set();
 let spinOn=true, spinSpeed=1, lastInteract=0, modalOpen=false;
@@ -16,6 +16,16 @@ function saveLayers(){ try{ localStorage.setItem('rode.atlasLayers', JSON.string
 const ESRI='https://services.arcgisonline.com/ArcGIS/rest/services/';
 function esri(path){ return new Cesium.ArcGisMapServerImageryProvider({url:ESRI+path+'/MapServer'}); }
 function typeColor(t){ return COLOR[t] || '#5aa9e6'; }
+// little satellite glyph (body + two solar wings) as an inline data-URI billboard
+const SAT_ICON="data:image/svg+xml,"+encodeURIComponent(
+  "<svg xmlns='http://www.w3.org/2000/svg' width='26' height='26' viewBox='0 0 24 24'>"+
+  "<g fill='#8fe9ff' stroke='#8fe9ff' stroke-width='1' stroke-linejoin='round'>"+
+  "<rect x='10.1' y='10.1' width='3.8' height='3.8' rx='0.6'/>"+
+  "<rect x='2.3' y='9.3' width='5' height='5.4' fill='#2f93b3'/>"+
+  "<rect x='16.7' y='9.3' width='5' height='5.4' fill='#2f93b3'/>"+
+  "<line x1='7.3' y1='12' x2='10.1' y2='12'/><line x1='13.9' y1='12' x2='16.7' y2='12'/>"+
+  "<line x1='12' y1='10.1' x2='12' y2='6.4'/><circle cx='12' cy='5.5' r='1.3'/>"+
+  "</g></svg>");
 
 function shell(){ return `
 <div class="page" style="height:100%">
@@ -40,6 +50,7 @@ function shell(){ return `
       <label class="ap-row"><input type="checkbox" id="lyInv" checked/> <span>Investigation</span><span class="ap-c" id="cInv"></span></label>
       <label class="ap-row"><input type="checkbox" id="lyTrace" checked/> <span>Traceroute paths</span></label>
       <label class="ap-row"><input type="checkbox" id="lyCam"/> <span>Public cameras</span></label>
+      <div id="camLegend" style="display:none;padding:2px 0 2px 22px;font-size:10.5px;color:var(--mut);line-height:1.9"></div>
       <div class="ap-row" style="padding-left:22px;gap:5px"><input id="windyKey" placeholder="Windy key (optional)" style="flex:1;min-width:0;font-size:11px;padding:4px 7px"/><button class="sm" id="windyGo">Load</button></div>
       <label class="ap-row"><input type="checkbox" id="lySat"/> <span>Satellites</span></label>
     </div>
@@ -58,6 +69,10 @@ function shell(){ return `
         <label class="ap-row"><input type="checkbox" id="labels" checked/> <span>Labels</span></label>
         <label class="ap-row"><input type="checkbox" id="sun" checked/> <span>Sunlight day/night</span></label>
         <label class="ap-row" title="HDR + anti-aliasing — richer light &amp; smoother edges. Turn off if the globe feels sluggish."><input type="checkbox" id="cine" checked/> <span>Cinematic quality (HDR)</span></label>
+        <div class="ap-lbl" style="margin-top:9px">Living Earth</div>
+        <label class="ap-row" title="Recent MODIS satellite imagery — real cloud cover from the last ~2 days (NASA GIBS)"><input type="checkbox" id="lyClouds"/> <span>Clouds — recent satellite (NASA)</span></label>
+        <label class="ap-row" title="Live global precipitation radar (RainViewer, free)"><input type="checkbox" id="lyRain"/> <span>Precipitation — live radar</span></label>
+        <div class="muted" style="font-size:10px;padding-left:22px;line-height:1.5">Day/night &amp; seasons already track real time.</div>
       </div>
     </div>
 
@@ -159,13 +174,42 @@ function setBase(kind){
 function setLabels(on){
   if(!viewer)return;
   if(labelLayer){ viewer.imageryLayers.remove(labelLayer,true); labelLayer=null; }
-  if(on){ labelLayer=viewer.imageryLayers.addImageryProvider(esri('Reference/World_Boundaries_and_Places')); }
+  // "Alternate" reference layer is designed for imagery bases — dark haloed text,
+  // far more legible over the satellite globe than the plain boundaries layer.
+  if(on){ labelLayer=viewer.imageryLayers.addImageryProvider(esri('Reference/World_Boundaries_and_Places_Alternate'));
+    labelLayer.brightness=1.35; }
 }
 function setHill(on){
   if(!viewer)return;
   if(hillLayer){ viewer.imageryLayers.remove(hillLayer,true); hillLayer=null; }
   if(on){ hillLayer=viewer.imageryLayers.addImageryProvider(esri('Elevation/World_Hillshade')); hillLayer.alpha=0.45;
     if(baseLayer) viewer.imageryLayers.raise(hillLayer); }
+}
+
+// ── Living Earth: real-data imagery layers (free, no key) ──
+function _gibsDate(){ const d=new Date(Date.now()-36*3600*1000); return d.toISOString().slice(0,10); }
+function setClouds(on){ if(!viewer)return;
+  if(cloudLayer){ try{ viewer.imageryLayers.remove(cloudLayer,true); }catch(e){} cloudLayer=null; }
+  if(!on)return;
+  try{
+    const p=new Cesium.UrlTemplateImageryProvider({
+      url:'https://gibs.earthdata.nasa.gov/wmts/epsg4326/best/MODIS_Terra_CorrectedReflectance_TrueColor/default/'+_gibsDate()+'/250m/{z}/{y}/{x}.jpg',
+      tilingScheme:new Cesium.GeographicTilingScheme(), maximumLevel:8, credit:'NASA GIBS' });
+    cloudLayer=viewer.imageryLayers.addImageryProvider(p);
+    if(labelLayer) viewer.imageryLayers.raiseToTop(labelLayer);   // keep place names readable
+  }catch(e){ toast('Cloud layer unavailable (needs internet)','warn'); }
+}
+async function setRain(on){ if(!viewer)return;
+  if(rainLayer){ try{ viewer.imageryLayers.remove(rainLayer,true); }catch(e){} rainLayer=null; }
+  if(!on)return;
+  try{
+    const meta=await (await fetch('https://api.rainviewer.com/public/weather-maps.json')).json();
+    const host=meta.host, past=(meta.radar&&meta.radar.past)||[]; const fr=past[past.length-1];
+    if(!host||!fr){ toast('No radar frames right now','warn'); const c=$('#lyRain'); if(c)c.checked=false; return; }
+    const p=new Cesium.UrlTemplateImageryProvider({ url:host+fr.path+'/256/{z}/{x}/{y}/2/1_1.png', maximumLevel:10, credit:'RainViewer' });
+    rainLayer=viewer.imageryLayers.addImageryProvider(p); rainLayer.alpha=0.72;
+    if(labelLayer) viewer.imageryLayers.raiseToTop(labelLayer);
+  }catch(e){ toast('Precipitation radar unavailable (needs internet)','warn'); const c=$('#lyRain'); if(c)c.checked=false; }
 }
 
 // HDR + MSAA — the heavier realism knobs, gated so users can drop them if it lags.
@@ -321,6 +365,10 @@ const CAM_SOURCES=[
   {id:'ne_usa', name:'New England 511',   bounds:[-73.6, 42.6, -66.8, 47.6]},
   {id:'neska',  name:'Nebraska 511',      bounds:[-104.1, 39.9, -95.2, 43.1]},
   {id:'la',     name:'Louisiana 511',     bounds:[-94.1, 28.8, -88.7, 33.1]},
+  {id:'mb',     name:'Manitoba 511',      bounds:[-102.1, 48.9, -88.9, 60.1]},
+  {id:'nb',     name:'New Brunswick 511', bounds:[-69.1, 44.5, -63.7, 48.1]},
+  {id:'pei',    name:'PEI 511',           bounds:[-64.5, 45.9, -61.9, 47.1]},
+  {id:'nl',     name:'Newfoundland 511',  bounds:[-59.5, 46.5, -52.5, 55.5]},
 ];
 function viewRectDeg(){ if(!viewer)return null;
   try{ const r=viewer.camera.computeViewRectangle(); if(!r)return null;
@@ -329,6 +377,7 @@ function camH(){ try{ return viewer.camera.positionCartographic.height; }catch(e
 function bInt(a,b){ return a[0]<=b[2]&&a[2]>=b[0]&&a[1]<=b[3]&&a[3]>=b[1]; }
 function inV(c,v){ if(!v)return true; const x=+c.lng,y=+c.lat; return x>=v[0]&&x<=v[2]&&y>=v[1]&&y<=v[3]; }
 let windySaved=false;
+let windyTiles=new Set();     // ~1° areas already queried from Windy, to avoid re-hitting the API
 async function initWindy(){
   try{ const st=await API('/secrets'); windySaved=!!(st&&st.windy); }catch(e){}
   // migrate any old browser-stored key to the gitignored server store, then clear it
@@ -341,19 +390,35 @@ async function initWindy(){
 async function queryWindy(explicit){
   if(!windySaved){ if(explicit)toast('Save your Windy key first','warn'); return false; }
   const v=viewRectDeg(); if(!v){ if(explicit)toast('Zoom to a place on the globe first','warn'); return false; }
-  const lat=(v[1]+v[3])/2, lng=(v[0]+v[2])/2;
-  const radius=Math.min(250, Math.max(20, Math.round((v[3]-v[1])*111/1.5)));
-  if(explicit){ setInfo('<span class="muted">querying Windy near '+lat.toFixed(2)+', '+lng.toFixed(2)+' ('+radius+'km)…</span>'); }
-  let res;
-  try{ res=await fetch('/api/cams/windy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat,lng,radius})}); }
-  catch(e){ if(explicit)toast('Could not reach the R.O.D.E server','warn'); return false; }
-  if(res.status===404){ toast('Windy endpoint missing — restart the R.O.D.E server (start.bat)','warn'); return false; }
-  if(!res.ok){ toast('Windy request failed ('+res.status+')','warn'); return false; }
-  let r; try{ r=await res.json(); }catch(e){ return false; }
-  if(r&&r.ok){ if(r.added){ toast('Loaded '+r.added+' Windy webcams','ok'); if(explicit)setInfo('<span class="muted">'+r.added+' Windy webcams loaded near this view.</span>'); return true; }
-    if(explicit){ toast('No Windy webcams within '+radius+'km of this view','warn'); setInfo('<span class="muted">Windy returned 0 cams here — try zooming to a bigger city.</span>'); } return false; }
-  if(r&&r.error){ toast('Windy: '+r.error,'warn'); if(explicit)setInfo('<span class="muted">Windy error: '+escapeHtml(r.error)+'</span>'); }
-  return false;
+  const spanLat=v[3]-v[1], spanLng=v[2]-v[0];
+  const radius=Math.min(250, Math.max(25, Math.round(spanLat*111/3)));
+  const step=Math.max(0.6,(radius/111)*1.7);                       // ~2×radius so circles tile
+  const cols=Math.min(3,Math.max(1,Math.ceil(spanLng/step)));
+  const rows=Math.min(3,Math.max(1,Math.ceil(spanLat/step)));
+  const pts=[];
+  for(let r=0;r<rows;r++) for(let c=0;c<cols;c++){
+    const lat=v[1]+spanLat*(r+0.5)/rows, lng=v[0]+spanLng*(c+0.5)/cols;
+    const key=Math.round(lat)+','+Math.round(lng);
+    if(!explicit && windyTiles.has(key)) continue;                 // already covered this area
+    windyTiles.add(key); pts.push([lat,lng]);
+  }
+  if(!explicit && pts.length>6) pts.length=6;                      // keep auto-pans quota-friendly
+  if(!pts.length) return false;
+  if(explicit){ setInfo('<span class="muted">querying Windy across '+pts.length+' point(s) ('+radius+'km each)…</span>'); }
+  let total=0, okAny=false;
+  for(const [lat,lng] of pts){
+    let res;
+    try{ res=await fetch('/api/cams/windy',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({lat,lng,radius})}); }
+    catch(e){ continue; }
+    if(res.status===404){ if(explicit)toast('Windy endpoint missing — restart the R.O.D.E server','warn'); return false; }
+    if(!res.ok) continue;
+    let r; try{ r=await res.json(); }catch(e){ continue; }
+    if(r&&r.ok){ okAny=true; total+=r.added||0; }
+    else if(r&&r.error){ if(explicit){ toast('Windy: '+r.error,'warn'); setInfo('<span class="muted">Windy error: '+escapeHtml(r.error)+'</span>'); } return false; }
+  }
+  if(total){ toast('Loaded '+total+' Windy webcams','ok'); if(explicit)setInfo('<span class="muted">'+total+' Windy webcams loaded across this view.</span>'); }
+  else if(explicit){ toast('No Windy webcams in this view','warn'); setInfo('<span class="muted">Windy returned 0 here — try a bigger city.</span>'); }
+  return okAny;
 }
 async function autoImportForView(){
   if(!layers.cam || camH()>4000000) return false;
@@ -367,14 +432,54 @@ async function autoImportForView(){
   return did;
 }
 function clearCamEntities(){ if(camDS)camDS.entities.removeAll(); camEntities=[]; }
+// classify a camera by its name/place so we can show a telling icon at a glance
+const CAM_KINDS={
+  highway:{c:'#e0863a',label:'highway',g:"<path d='M12 4v4M12 11v2M12 16v4'/>"},
+  intersection:{c:'#4a90d9',label:'intersection',g:"<path d='M12 4v16M4 12h16'/>"},
+  roundabout:{c:'#38b2ac',label:'roundabout',g:"<circle cx='12' cy='12' r='4.5'/>"},
+  transit:{c:'#a06cd5',label:'metro / rail',g:"<rect x='7.5' y='5' width='9' height='11' rx='2'/><path d='M9 19l1.5-3M15 19l-1.5-3'/>"},
+  bridge:{c:'#c0894a',label:'bridge / tunnel',g:"<path d='M3 14c4 0 4-4 9-4s5 4 9 4M4 14v4M20 14v4'/>"},
+  street:{c:'#5fbf8a',label:'street',g:"<circle cx='12' cy='12' r='3'/>"},
+  webcam:{c:'#e0a24b',label:'webcam',g:"<rect x='5.5' y='8' width='10' height='8' rx='1.5'/><path d='M15.5 10.5l4-2v7l-4-2z'/>"},
+};
+function camKind(c){
+  if((c.type||'')==='webcam') return 'webcam';
+  const s=((c.name||'')+' '+(c.place||'')).toLowerCase();
+  if(/round\s?about|traffic circle|rotary/.test(s)) return 'roundabout';
+  if(/\b(metro|subway|rail|train|station|transit|platform|light\s?rail|lrt|tram)\b/.test(s)) return 'transit';
+  if(/\b(bridge|tunnel|overpass|viaduct|crossing)\b/.test(s)) return 'bridge';
+  if(/\b(hwy|highway|freeway|motorway|interstate|expressway|expy|autoroute|turnpike|qew|i-?\d|us-?\d|sr-?\d|route)\b/.test(s)) return 'highway';
+  if(/ at |&| and |intersection|junction|\bjct\b|@/.test(s)) return 'intersection';
+  return 'street';
+}
+const _camIconCache={};
+function camIcon(kind){
+  if(_camIconCache[kind]) return _camIconCache[kind];
+  const k=CAM_KINDS[kind]||CAM_KINDS.street;
+  const uri="data:image/svg+xml,"+encodeURIComponent(
+    "<svg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24'>"+
+    "<circle cx='12' cy='12' r='11' fill='"+k.c+"' stroke='#0a0d12' stroke-width='1.6'/>"+
+    "<g fill='none' stroke='#0a0d12' stroke-width='1.7' stroke-linecap='round' stroke-linejoin='round'>"+k.g+"</g></svg>");
+  _camIconCache[kind]=uri; return uri;
+}
+function renderCamLegend(){
+  const el=$('#camLegend'); if(!el)return;
+  el.style.display=layers.cam?'block':'none';
+  if(!el.dataset.built){
+    el.innerHTML=Object.keys(CAM_KINDS).map(k=>`<div><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${CAM_KINDS[k].c};margin-right:6px;vertical-align:middle"></span>${CAM_KINDS[k].label}</div>`).join('');
+    el.dataset.built='1';
+  }
+}
 function addCamEntities(){
   if(!viewer)return; clearCamEntities();
   if(!layers.cam){ setMeta(); return; }
   const v=viewRectDeg();
   cams.filter(c=>c.lat&&c.lng&&inV(c,v)).forEach(c=>{
+    const kind=camKind(c);
     const e=camDS.entities.add({ position:Cesium.Cartesian3.fromDegrees(+c.lng,+c.lat),
-      point:{pixelSize:8,color:Cesium.Color.fromCssColorString(c.url?'#5fbf8a':'#e0a24b'),outlineColor:Cesium.Color.BLACK,outlineWidth:1,disableDepthTestDistance:Number.POSITIVE_INFINITY} });
-    e._cam=c; camEntities.push(e); });
+      billboard:{ image:camIcon(kind), width:22, height:22, disableDepthTestDistance:Number.POSITIVE_INFINITY,
+        scaleByDistance:new Cesium.NearFarScalar(1.0e5,1.7,1.0e7,0.62) } });
+    e._cam=c; e._kind=kind; camEntities.push(e); });
   setMeta();
 }
 async function loadCams(){
@@ -394,8 +499,14 @@ async function loadSats(){
   if(!viewer || typeof satellite==='undefined') return;
   try{ const d=await API('/satellites'); const sats=d.sats||[];
     sats.forEach(s=>{ let rec; try{ rec=satellite.twoline2satrec(s.l1,s.l2); }catch(e){ return; }
-      const e=viewer.entities.add({ point:{pixelSize:3,color:Cesium.Color.CYAN.withAlpha(0.9),disableDepthTestDistance:Number.POSITIVE_INFINITY},
-        label:{text:s.name,font:'9px monospace',fillColor:Cesium.Color.CYAN.withAlpha(0.6),pixelOffset:new Cesium.Cartesian2(6,0),
+      // billboard icon (bigger, clickable); no disableDepthTestDistance so the
+      // globe occludes satellites on its far side
+      const e=viewer.entities.add({ billboard:{ image:SAT_ICON, width:30, height:30,
+          verticalOrigin:Cesium.VerticalOrigin.CENTER,
+          scaleByDistance:new Cesium.NearFarScalar(1.0e6,1.35,3.2e7,0.72) },
+        label:{text:s.name,font:'bold 10px monospace',fillColor:Cesium.Color.CYAN.withAlpha(0.75),
+          outlineColor:Cesium.Color.BLACK,outlineWidth:2,style:Cesium.LabelStyle.FILL_AND_OUTLINE,
+          pixelOffset:new Cesium.Cartesian2(15,0),
           translucencyByDistance:new Cesium.NearFarScalar(3.0e6,1.0,1.2e7,0.0)} });
       e._sat={name:s.name,rec}; satEntities.push({rec,e}); });
     updateSats(); if(satTimer)clearInterval(satTimer); satTimer=setInterval(updateSats,2000); setMeta();
@@ -496,6 +607,8 @@ function mount(root){
   $('#labels').onchange=e=>setLabels(e.target.checked);
   $('#sun').onchange=e=>{ if(viewer)viewer.scene.globe.enableLighting=e.target.checked; };
   $('#cine').onchange=e=>setCinematic(e.target.checked);
+  $('#lyClouds').onchange=e=>setClouds(e.target.checked);
+  $('#lyRain').onchange=e=>setRain(e.target.checked);
   try{ const c=localStorage.getItem('rode.atlasCine'); if(c!==null&&$('#cine'))$('#cine').checked=c==='1'; }catch(e){}
   $('#spin').onchange=e=>{ spinOn=e.target.checked; try{ localStorage.setItem('rode.atlasSpin', spinOn?'1':'0'); }catch(_){} };
   $('#spd').onchange=e=>{ spinSpeed=+e.target.value||1; };
@@ -511,7 +624,7 @@ function mount(root){
     if(!layers.cam){ layers.cam=true; const c=$('#lyCam'); if(c)c.checked=true; }
     const ok=await queryWindy(true);
     if(ok){ try{ const d=await API('/cams'); cams=d.cameras||[]; }catch(e){} addCamEntities(); } };
-  $('#lyCam').onchange=e=>{ layers.cam=e.target.checked; saveLayers(); if(layers.cam)loadCams(); else { clearCamEntities(); importedSources.clear(); } setMeta(); };
+  $('#lyCam').onchange=e=>{ layers.cam=e.target.checked; saveLayers(); if(layers.cam)loadCams(); else { clearCamEntities(); importedSources.clear(); windyTiles.clear(); } setMeta(); renderCamLegend(); };
   $('#lySat').onchange=e=>{ layers.sat=e.target.checked; saveLayers(); if(layers.sat)loadSats(); else clearSats(); };
   $('#svExit').onclick=exitSatView; $('#svExitTop').onclick=exitSatView; $('#svZoomIn').onclick=()=>svZoom(true); $('#svZoomOut').onclick=()=>svZoom(false);
   $('#svSpeed').onchange=e=>{ satSpeed=+e.target.value||0.25; };
@@ -524,6 +637,7 @@ function mount(root){
   $('#lyInv').checked=layers.inv; $('#lyTrace').checked=layers.trace; $('#lyCam').checked=layers.cam; $('#lySat').checked=layers.sat;
   if(layers.cam) loadCams();
   if(layers.sat) loadSats();
+  renderCamLegend();
   loadOverlay();
 }
 function unmount(){
@@ -533,7 +647,7 @@ function unmount(){
   if(camHandler){ try{camHandler.destroy();}catch(e){} camHandler=null; }
   if(viewer){ try{viewer.destroy();}catch(e){} viewer=null; }
   cams=[]; camEntities=[]; satEntities=[]; overlayEntities=[]; traceEntities=[]; locateEntities=[];
-  importedSources=new Set(); baseLayer=labelLayer=hillLayer=null;
+  importedSources=new Set(); baseLayer=labelLayer=hillLayer=cloudLayer=rainLayer=null;
 }
 function refresh(){ if(viewer) try{ loadOverlay(); }catch(e){} }
 export default { id:'atlas', label:'Atlas', short:'Atlas', mount, unmount, refresh };

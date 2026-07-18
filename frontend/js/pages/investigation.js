@@ -4,7 +4,7 @@ import { $, API, S, NM, NOISE, PH, COLOR, escapeHtml, makeTyper, toast,
 import { updateFootprint, ask, show, hide, sendTo } from '../app.js';
 import atlas from './atlas.js';
 
-let cy=null, sel=null, hidden=new Set(), term=null, layout='', zs=false, pickHandler=null, winCleanup=[], mapMounted=false, tlTimer=null, lens='graph';
+let cy=null, sel=null, hidden=new Set(), term=null, layout='', zs=false, pickHandler=null, winCleanup=[], mapMounted=false, tlTimer=null, lens='graph', threatMap={};
 
 const HTML=`
 <div class="invwrap" id="invwrap">
@@ -17,6 +17,7 @@ const HTML=`
       <button class="sm ghost" id="lensTimeline">Timeline</button>
       <span id="graphtools" style="display:inline-flex;gap:7px;margin-left:4px">
         <button class="sm ghost" id="fitBtn" title="Fit to view"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Fit</button>
+        <button class="sm ghost" id="threatBtn" title="Check nodes against abuse.ch threat feeds (Feodo C2 + URLhaus)"><svg class="ic" viewBox="0 0 24 24"><path d="M12 2 3 6v6c0 5 3.8 8.4 9 10 5.2-1.6 9-5 9-10V6z"/><path d="M12 8v4M12 15.5v.5"/></svg>Threats</button>
         <button class="icon ghost sm" id="maxGraph" title="Focus graph" aria-label="Focus graph"><svg class="ic" viewBox="0 0 24 24"><path d="M8 3H3v5M21 8V3h-5M3 16v5h5M16 21h5v-5"/></svg></button>
         <button class="sm danger" id="resetBtn" title="Clear this investigation's graph"><svg class="ic" viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>Reset</button>
       </span>
@@ -62,6 +63,7 @@ function mount(root){
   $('#toolSel').onchange=updateNoiseTag;
   $('#cancelBtn').onclick=()=>cancelRun();
   $('#fitBtn').onclick=()=>cy&&cy.fit(null,40);
+  $('#threatBtn').onclick=async()=>{ toast('Refreshing abuse.ch threat feeds…'); try{ await fetch('/api/threatintel/refresh',{method:'POST'}); }catch(e){} scanThreats(true); };
   $('#resetBtn').onclick=resetGraph;
   $('#lensGraph').onclick=()=>switchLens('graph');
   $('#lensMap').onclick=()=>switchLens('map');
@@ -200,6 +202,7 @@ async function drawGraph(){
       {selector:'node:selected',style:{'border-width':2,'border-color':'#46b1c9','underlay-opacity':0.45,'font-size':'12px','color':'#e7ebf0','z-index':99}},
       {selector:'node.hl',style:{'font-size':'12px','color':'#eef2f6','z-index':99}},
       {selector:'node.flash',style:{'border-width':3,'border-color':'#ffd76a','underlay-color':'#ffd76a','underlay-opacity':0.55,'underlay-padding':9,'z-index':999}},
+      {selector:'node.threat',style:{'border-width':3,'border-color':'#e0454a','underlay-color':'#e0454a','underlay-opacity':0.5,'underlay-padding':7,'z-index':60}},
       {selector:'edge',style:{'width':1.1,'line-color':'#42505f','target-arrow-color':'#5a6b80','target-arrow-shape':'triangle','arrow-scale':0.9,'curve-style':'bezier','opacity':0.72}},
       {selector:'edge:selected',style:{'line-color':'#46b1c9','target-arrow-color':'#46b1c9','opacity':1}},
     ],
@@ -218,6 +221,23 @@ async function drawGraph(){
     cy.nodes().forEach((n,i)=>{ n.style('opacity',0); n.delay(i*14).animate({style:{opacity:1}},{duration:220}); });
   }
   buildFilters(g.nodes); applyFilter();
+  scanThreats();
+}
+// ── threat intel: badge nodes that appear in free abuse.ch feeds ──
+async function scanThreats(loud){
+  if(!cy) return;
+  const vals=[...new Set(cy.nodes().map(n=>({t:n.data('type'),v:n.data('value')}))
+    .filter(x=>['ip','host','domain','url'].includes(x.t)&&x.v).map(x=>String(x.v)))];
+  if(!vals.length){ if(loud)toast('No IPs/domains in the graph to check','warn'); return; }
+  let r; try{ r=await (await fetch('/api/threatintel/check',{method:'POST',
+    headers:{'Content-Type':'application/json'},body:JSON.stringify({values:vals})})).json(); }
+  catch(e){ if(loud)toast('Threat-intel lookup failed','err'); return; }
+  threatMap=r.results||{}; let bad=0;
+  cy.nodes().forEach(n=>{ const info=threatMap[String(n.data('value'))];
+    if(info&&info.listed){ n.addClass('threat'); bad++; } else n.removeClass('threat'); });
+  const src=r.sources||{feodo:0,urlhaus:0};
+  if(bad) toast('⚠ '+bad+' node(s) match known-bad threat intel','warn');
+  else if(loud) toast('Clean — no nodes match abuse.ch feeds ('+src.feodo+' C2 + '+src.urlhaus+' hosts checked)','ok');
 }
 function applyZoomScaling(){
   if(!cy)return; const z=cy.zoom(); const f=Math.min(3.8,Math.max(1,1.0/z));
@@ -267,6 +287,8 @@ async function nodeMenu(node){
     <button class="ins-x" aria-label="Close">&times;</button></div>
     <div class="ins-val">${escapeHtml(det.value||d.value)}</div>`;
   const chips=[];
+  const _ti=threatMap[String(det.value||d.value)];
+  if(_ti&&_ti.listed)chips.push(`<span class="ins-chip" style="background:#e0454a22;color:#ff9a9d;border-color:#e0454a66" title="Flagged by ${escapeHtml(_ti.source)}">⚠ ${escapeHtml(_ti.source)}: ${escapeHtml(_ti.threat||'known-bad')}</span>`);
   if(meta.severity)chips.push(`<span class="sev ${meta.severity}">${meta.severity}</span>`);
   if(meta.source)chips.push(`<span class="ins-chip">via ${escapeHtml(meta.source)}</span>`);
   if(det.times_seen>1)chips.push(`<span class="ins-chip">seen ${det.times_seen}×</span>`);

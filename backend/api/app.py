@@ -437,6 +437,25 @@ def api_geocode(q: str):
     return nettrace.geocode(q)
 
 
+class ThreatCheckIn(BaseModel):
+    values: list[str] = []
+
+
+@app.post("/api/threatintel/check")
+def api_threat_check(body: ThreatCheckIn):
+    """Flag graph nodes (IP/domain/URL host) against free abuse.ch feeds."""
+    from .. import threatintel
+    return threatintel.check_many(body.values)
+
+
+@app.post("/api/threatintel/refresh")
+def api_threat_refresh():
+    from .. import threatintel
+    st = threatintel.refresh(force=True)
+    return {"ok": True, "updated": st.get("loaded"),
+            "sources": {"feodo": len(st.get("feodo", {})), "urlhaus": len(st.get("urlhaus", {}))}}
+
+
 @app.get("/api/exposure")
 def api_exposure(target: str):
     from ..exposure import lookup

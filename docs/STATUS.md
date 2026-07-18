@@ -87,11 +87,15 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
       on the graph, one-click hand-off into msfconsole. `[WRAP]` — done.
 - [x] **Metasploit (msfconsole)** Dockerized + in-app terminal, and **msfvenom Payload
       Builder**, for authorized lab use. `[WRAP]` — done (Payloads page).
-- [ ] **Two-level explanations** everywhere (beginner + advanced), including the Report.
-- [ ] **Report upgrade** — narrative + severity/loudness + fix steps at both levels.
+- [x] **Report upgrade — two levels** — Beginner/Advanced toggle in the report; narrative
+      overview, "severity vs loudness" explainer, and a per-finding **Technical detail** block
+      (raw evidence: rule/template, CVE, matched-at, port, tool) with prioritisation. `[done]`
+- [ ] **Two-level explanations** in the remaining tool pages (Report + Exploits done).
 
 ### Backlog wins (from IDEAS.md)
-- [ ] Threat-intel **node badges** (abuse.ch URLhaus/Feodo — free). `[API]`
+- [x] Threat-intel **node badges** (abuse.ch URLhaus/Feodo — free, cached) — known-bad IPs/
+      domains get a red ring + an inspector chip naming the threat; auto-scan on graph load +
+      a **Threats** toolbar button (force-refresh). `[API]` — done.
 - [ ] **Pwned Passwords** k-anonymity check. `[API]`
 - [ ] **OWASP ZAP** baseline scan. `[WRAP]`
 - [ ] **Lynis** host audit. `[WRAP]`
@@ -112,6 +116,13 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - [x] **Globe realism** — always-on ground/sky atmosphere + depth fog + atmosphere
       saturation/brightness; **Cinematic quality** toggle for HDR + MSAA (default on, drop it
       if it lags). `[done]`
+- [x] **Living Earth layers** — real-time sun/seasons (day-night terminator tracks the real
+      clock); toggleable **Clouds — recent satellite** (NASA GIBS MODIS) and **live
+      Precipitation radar** (RainViewer). Free/no-key; graceful offline failure. `[done]`
+- [ ] **Ocean currents** (stretch) — animated particle flow from NOAA/OSCAR vector data; needs
+      a custom Cesium particle layer, a bigger lift than a tile layer.
+- [ ] **Camera-type icons** — done: highway / intersection / roundabout / metro / bridge /
+      street / webcam glyphs + legend. `[done]`
 
 ### Quality of life
 - [ ] Notes + tags on entities; investigation **entity search**.

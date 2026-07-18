@@ -95,8 +95,17 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
   .plain .t{{font-weight:700;color:#2E7D6F;margin-bottom:4px}}
   .why{{font-size:14px}} .fix li{{margin:3px 0}}
   .muted{{color:#5c7080;font-size:13px}} code{{background:#f0f2f4;padding:1px 5px;border-radius:4px;font-size:13px}}
-  @media print{{body{{padding:0}}}}
+  .lvltoggle{{position:fixed;top:12px;right:14px;display:flex;border:1px solid #cdd7e1;border-radius:7px;overflow:hidden;font-size:12px;z-index:9}}
+  .lvltoggle button{{border:0;background:#fff;color:#5c7080;padding:5px 13px;cursor:pointer;font:inherit}}
+  .lvltoggle button.on{{background:#2E75B6;color:#fff}}
+  .lvl-a{{display:none}} body.adv .lvl-a{{display:block}} body.adv .lvl-b{{display:none}}
+  .tech{{background:#f4f6f8;border-left:5px solid #5c7080;padding:10px 14px;border-radius:0 6px 6px 0;margin:8px 0;font-size:13.5px}}
+  .tech .t{{font-weight:700;color:#3a4a5a;margin-bottom:5px}} .tech code{{background:#e7ebef}}
+  .kv{{margin:2px 0}} .kv b{{color:#3a4a5a;min-width:104px;display:inline-block}}
+  .note{{background:#fff8e6;border-left:5px solid #b8860b;padding:10px 14px;border-radius:0 6px 6px 0;margin:12px 0;font-size:13.5px}}
+  @media print{{body{{padding:0}}.lvltoggle{{display:none}}}}
 </style></head><body>""")
+    P.append('<div class="lvltoggle"><button id="lb" class="on">Beginner</button><button id="la">Advanced</button></div>')
     P.append(f"<h1>{_e(inv.name)}</h1>")
     P.append(f'<div class="meta">R.O.D.E v4 investigation report &middot; {now} &middot; scope: {_e(", ".join(inv.scope()) or "local only")}</div>')
 
@@ -108,6 +117,35 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
     P.append(f'<div class="sc"><b>{len(ents)}</b><span>entities</span></div>')
     P.append(f'<div class="sc"><b>{len(runs)}</b><span>tool runs</span></div>')
     P.append('</div>')
+
+    # Narrative overview (two-level)
+    crit = counts.get("critical", 0); high = counts.get("high", 0)
+    n_host = len([e for e in ents if e.type in ("ip", "host")])
+    scope_txt = ", ".join(inv.scope()) or "your local machine"
+    top = findings[0].title if findings else None
+    nb = [f"This report covers {scope_txt}. R.O.D.E examined {len(ents)} item(s) and recorded {len(findings)} finding(s)."]
+    if crit or high:
+        nb.append(f"{crit + high} need attention first ({crit} critical, {high} high)"
+                  + (f", starting with “{top}”." if top else "."))
+    elif findings:
+        nb.append("Nothing critical stood out, but review the items below.")
+    else:
+        nb.append("Nothing notable was flagged yet — run more tools to deepen the picture.")
+    na = [f"Scope {scope_txt}. Graph holds {len(ents)} entities ({n_host} hosts) across {len(runs)} tool run(s); "
+          f"{len(findings)} de-duplicated findings — {crit} critical / {high} high / "
+          f"{counts.get('medium',0)} medium / {counts.get('low',0)} low / {counts.get('info',0)} info."]
+    if exploits_present := [e for e in ents if e.type == "exploit"]:
+        na.append(f"{len(exploits_present)} public exploit(s) were matched to discovered software (see attack paths).")
+    P.append(f'<div class="plain"><div class="t">Overview</div>'
+             f'<div class="lvl-b">{_e(" ".join(nb))}</div>'
+             f'<div class="lvl-a">{_e(" ".join(na))}</div></div>')
+    P.append('<div class="note"><div class="lvl-b"><b>How to read this:</b> every finding has a '
+             '<b>severity</b> — how bad it is if abused (info → critical). Fix critical and high first. '
+             'Switch to <b>Advanced</b> (top-right) for the exact rules, CVEs and evidence.</div>'
+             '<div class="lvl-a"><b>Severity vs loudness.</b> Severity = potential impact of the issue. '
+             'Loudness = how detectable the scan that surfaced it is on the wire — active/exploit checks are '
+             'far easier for a defender or IDS to notice than passive lookups. Prioritise by severity; plan '
+             'engagement timing by loudness.</div></div>')
     if not findings and not caps:
         P.append('<p class="muted">No findings or capabilities recorded yet. Run some tools, then regenerate this report.</p>')
 
@@ -123,6 +161,23 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
                      f'<div>{_e(kb.get("plain",""))}</div>')
             if kb.get("why"):
                 P.append(f'<div class="why" style="margin-top:6px"><b>Why it matters:</b> {_e(kb["why"])}</div>')
+            P.append('</div>')
+            # advanced: technical evidence pulled from the finding's raw detail
+            try:
+                m = json.loads(f.detail or "{}")
+            except Exception:
+                m = {}
+            rows = []
+            for label, key in (("Rule / template", "template"), ("Rule", "rule"),
+                               ("Package", "pkg"), ("CVE", "cve"), ("Matched at", "matched_at"),
+                               ("Evidence", "evidence"), ("URL", "url"), ("Port", "port"), ("Tool", "tool")):
+                v = m.get(key)
+                if v:
+                    rows.append(f'<div class="kv"><b>{_e(label)}</b> <code>{_e(str(v)[:160])}</code></div>')
+            P.append('<div class="tech lvl-a"><div class="t">Technical detail</div>')
+            P.append("".join(rows) if rows else '<div class="muted">No structured evidence captured.</div>')
+            prio = "fix immediately" if f.severity in ("critical", "high") else "schedule after higher-severity items"
+            P.append(f'<div style="margin-top:7px"><b>Severity {_e(f.severity)}</b> — impact if abused; {prio}.</div>')
             P.append('</div>')
             if kb.get("fix"):
                 P.append('<b>How to fix it</b><ul class="fix">')
@@ -180,6 +235,10 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
 
     P.append('<p class="muted" style="margin-top:26px">Generated by R.O.D.E v4. Plain-English explanations come from '
              'R.O.D.E&#39;s findings knowledge base. Validate findings before formal use.</p>')
+    P.append("<script>(function(){var b=document.body,lb=document.getElementById('lb'),"
+             "la=document.getElementById('la');function s(a){b.classList.toggle('adv',a);"
+             "lb.classList.toggle('on',!a);la.classList.toggle('on',a);}"
+             "if(lb&&la){lb.onclick=function(){s(false);};la.onclick=function(){s(true);};}})();</script>")
     P.append("</body></html>")
 
     safe = "".join(c if c.isalnum() else "_" for c in inv.name)[:40] or "investigation"

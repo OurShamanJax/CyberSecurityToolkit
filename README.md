@@ -13,6 +13,10 @@ or in Docker; **no accounts, no API keys, no cloud.**
 
 ## 1. Prerequisites
 
+**Supported platforms:** Windows 10/11, modern Linux (Ubuntu/Debian/Fedora/Arch), and
+macOS (Intel or Apple Silicon). Windows 7/8 are **not supported** — Python 3.10+ won't
+install there. Linux is the smoothest experience for the offensive tooling.
+
 | Requirement | Why | Notes |
 |---|---|---|
 | **Python 3.10+** | runs the app | tick "Add Python to PATH" on Windows |
