@@ -41,10 +41,12 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
   resizable compass** (double-click = north-up), and **horizon culling** so only the
   near-hemisphere icons draw (no far-side clutter through the globe).
   - **Cameras:** worldwide via Windy (optional free key) with a **multi-point viewport sweep**
-    for density, plus no-key government feeds — Caltrans, NYC, London, and the **"One Network"
-    511 family** (10+ US states + Canadian provinces). **Type-classified icons** (highway /
-    intersection / roundabout / metro / bridge / street / webcam) + legend, marker clustering,
-    and **multi-camera floating windows** (open many feeds at once; drag / resize / close each).
+    for density, plus no-key government feeds — Caltrans, NYC, London, the **"One Network"
+    511 family** (10+ US states + Canadian provinces), and **New Zealand (NZTA)**.
+    **Type-classified icons** (highway / intersection / roundabout / metro / bridge / street /
+    webcam) + legend, marker clustering, and **multi-camera floating windows** (open many feeds
+    at once; drag / resize / close each). **Mapillary street view** — 🛣 on a camera, or
+    Street-view mode to click any road into the interactive viewer (coverage dots + address).
   - **Satellites:** real TLE-driven positions (labels on hover to declutter), simulated
     cinematic viewpoint (film-grain / scanline / HUD downlink look, clearly labelled SIM).
   - **Living Earth:** real-time sun/seasons; **Precipitation radar** (RainViewer) + **Wildfires**
@@ -72,100 +74,52 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
   hand-authored exploit/malware — msfvenom does the work.
 - **Settings** — animations, density, accent, tool/capability check.
 
+### Intelligence, durability & onboarding
+- **MITRE ATT&CK mapping** — tools/entities → techniques; coverage view in the Report + on
+  Home; per-node technique chips in the inspector.
+- **Correlation engine** — combined-signal escalations (vuln + matched exploit, known-bad
+  infra, exposed + vulnerable host, recovered creds) on Home + Report, with a map cross-link.
+- **Threat-intel badges** — abuse.ch Feodo/URLhaus flag known-bad IPs/domains (red ring +
+  inspector chip); auto-scan on graph load + a Threats toolbar button.
+- **Run history + diff + export** — per-investigation run list, line-diff between runs of the
+  same tool/target, JSON/CSV export.
+- **Pwned Passwords** (k-anonymity, in Credentials) + **Lynis** host audit (wrapped tool).
+- **First-run tour** — guided 6-step overlay on Home, with a replay button.
+
 ### Ops
-- `.gitignore` protecting personal data (`data/`, DB, GeoIP cache, VPN keys); README setup
-  guide; requirements pinned; docs folder (STRATEGY / IDEAS / SECURITY / PROGRAM_REVIEW).
+- `.gitignore` protecting personal data (`data/`, DB, GeoIP cache, VPN keys, API tokens);
+  README + `OFFENSIVE_SETUP.md`; requirements pinned; `start.bat audit` (pip-audit) self-check.
+- Docs: PROGRAM_REVIEW (current architecture) · STATUS (this) · IDEAS (backlog) ·
+  OFFENSIVE_SETUP · SECURITY. STRATEGY / DESIGN are historical planning docs.
 
 ---
 
-## 🔜 To Do — next up (ordered)
+## 🔜 To Do — what's actually left
 
-### Unify (finish the "one picture" — highest leverage)
-- [x] **Timeline lens** — scrubbable time axis of when entities were discovered, lanes by
-      type, Replay animation, click-to-focus in the graph. `[done]`
-- [x] **Universal inspector** — shared `js/inspector.js` renderer (the graph popup's look,
-      promoted); Live Traffic packet detail now renders through it; Map + Home reuse it. `[done]`
-- [x] Home **dashboard** — command-center landing page (default route): current investigation
-      summary, top findings, one-click jumps, investigation switcher. `[done]`
-- [x] **Atlas merged into the Map lens** — one globe, not two. Atlas is now the Investigation
-      Map lens (locate / traceroute / cameras / **fly-to place or lat,lng**); the standalone
-      Recon page is retired. Analyzer moved to **Defense**. `[done]`
+*(The big arcs — the three lenses, the Map/globe, Metasploit + exploit paths, ATT&CK,
+correlation, run history, threat-intel, onboarding, the platform/setup docs — are all done
+and now live under "Have Done". These are the genuinely open items.)*
 
-### Exploit focus (per the new direction)
-- [x] **Exploit-DB + exploit paths** — Find-exploits from any vuln/service node, exploit nodes
-      on the graph, one-click hand-off into msfconsole. `[WRAP]` — done.
-- [x] **Metasploit (msfconsole)** Dockerized + in-app terminal, and **msfvenom Payload
-      Builder**, for authorized lab use. `[WRAP]` — done (Payloads page).
-- [x] **Report upgrade — two levels** — Beginner/Advanced toggle in the report; narrative
-      overview, "severity vs loudness" explainer, and a per-finding **Technical detail** block
-      (raw evidence: rule/template, CVE, matched-at, port, tool) with prioritisation. `[done]`
-- [ ] **Two-level explanations** in the remaining tool pages (Report + Exploits done).
+### Coverage & tools
+- [ ] **OWASP ZAP** baseline web-app scan. `[WRAP]`
+- [ ] **Suricata / Zeek** behind Live Traffic (turn it into a real IDS). `[WRAP]`
+- [ ] gowitness **screenshots on graph nodes**. `[WRAP]`
+- [ ] **Two-level explanations** on the remaining tool pages (Report + Exploits already have them).
 
-### Backlog wins (from IDEAS.md)
-- [x] Threat-intel **node badges** (abuse.ch URLhaus/Feodo — free, cached) — known-bad IPs/
-      domains get a red ring + an inspector chip naming the threat; auto-scan on graph load +
-      a **Threats** toolbar button (force-refresh). `[API]` — done.
-- [x] **Pwned Passwords** k-anonymity check — Credentials page; password never leaves the
-      machine (only the SHA-1 prefix is sent). `[API]` — done.
-- [ ] **OWASP ZAP** baseline scan. `[WRAP]`
-- [x] **Lynis** host audit — wrapped tool + parser (warnings/suggestions → findings, hardening
-      index → score). Linux/macOS. `[WRAP]` — done.
-- [x] **MITRE ATT&CK mapping** — tool/entity→technique map, coverage endpoint, Report section +
-      Home card + per-node inspector chips. — done.
-- [x] **Correlation rules** — combined-signal escalations (vuln+exploit, known-bad, exposed+
-      vulnerable, creds) on Home + Report; geo cross-link to the map. — done.
-- [x] **Run history + diff + export** — history list, line-diff between runs, JSON/CSV export
-      on Home. — done.
-- [x] **First-run tour** — guided 6-step overlay on Home + replay button. — done.
-- [ ] **Suricata/Zeek** behind Live Traffic. `[WRAP]`
-- [x] **LAN discovery** → graph (tool + one-click button, OUI vendors). `[WRAP]` — done.
-- [ ] gowitness **screenshots on nodes**; **live threat map**. `[WRAP]/[FUN]`
+### Workflow / quality of life
+- [ ] Entity **notes + tags**, and investigation **entity search**.
+- [ ] Investigation **templates** (starter scope + tool sets).
+- [ ] **Consistency pass** so every page uses one shared shell/template.
 
-### Globe polish (Atlas / Map lens)
-- [x] **More public camera feeds** — generic **"One Network" 511 importer** (public, no-key
-      `/api/v2/get/cameras`) covering Ontario, Alberta, Nova Scotia, Saskatchewan, Nevada,
-      Wisconsin, Pennsylvania, New England, Nebraska, Louisiana — on top of Caltrans / NYC /
-      London / Windy. Cameras auto-load by viewport. Legit published DOT feeds only (no
-      Insecam-style unsecured cams). `[WRAP]` *(endpoints implemented to documented schema;
-      verify live coverage on a networked machine — dead ones fail gracefully.)*
-- [x] **Satellite viewport → live-feed look** — CSS FX overlay: film grain, scanlines,
-      vignette, corner brackets + crosshair, blinking REC, live LAT/LON/ALT + UTC telemetry,
-      gentle drift. Still clearly labelled **SIM** (honest). `[done]`
-- [x] **Globe realism** — always-on ground/sky atmosphere + depth fog + atmosphere
-      saturation/brightness; **Cinematic quality** toggle for HDR + MSAA (default on, drop it
-      if it lags). `[done]`
-- [x] **Living Earth layers** — real-time sun/seasons (day-night terminator tracks the real
-      clock); toggleable **Precipitation radar** (RainViewer, free) with a color key; and
-      **Wildfires** (NASA FIRMS active fire detections, optional free key stored server-side
-      like Windy) coloured by confidence, viewport-loaded, with a color key + click detail.
-      Clouds layer was removed (GIBS tile jank). `[done]`
-- [~] **Ocean currents** — removed. Tried directional arrows, glow lines, and a canvas
-      particle flow; none read well without a real global velocity grid + land mask. Parked
-      until it can be a proper dedicated build (NASA OSCAR data + WebGL particle layer).
-- [x] **Compass** — draggable + resizable rose that tracks camera heading; double-click =
-      north-up. `[done]`
-- [x] **Camera-type icons** — highway / intersection / roundabout / metro / bridge / street /
-      webcam glyphs + legend. `[done]`
-- [x] **Multi-camera floating windows** — click a camera to open its feed in a floating panel;
-      drag / resize / close each; open many at once from different places. `[done]`
-- [x] **Horizon culling** — far-side icons (cameras / fires / sats / pins) hidden every frame
-      so only the hemisphere you're looking at draws. `[done]`
-- [x] **Satellite declutter** — 140 labels hidden by default, name shown on hover. `[done]`
-- [x] **Windy density** — viewport multi-point sweep + quota-guard, fills any country. `[done]`
-
-### Quality of life
-- [ ] Notes + tags on entities; investigation **entity search**.
-- [ ] **Run history** + re-run + diff between scans.
-- [ ] Investigation **templates**; export (JSON/CSV/PDF).
-- [ ] Consistency pass so every page uses one template.
-
-### Platform / setup
-- [x] Document **WSL2 + usbipd** path for monitor-mode WiFi (deauth / handshake) on Windows.
-      → `docs/OFFENSIVE_SETUP.md` §1 (hardware, usbipd steps, honest WSL-kernel caveats).
-- [x] AV guidance for offensive tooling (exclusions, why Defender flags it).
-      → `docs/OFFENSIVE_SETUP.md` §2 (isolate in VM/Docker, one narrow exclusion folder).
-- [x] Dogfood: `pip-audit` in the launcher (`start.bat audit`) + Trivy documented.
-      pip-audit run on requirements = **no known vulnerabilities**. `[done]`
+### Bigger / parked
+- [ ] **"Secure your own cameras" audit** *(pinned idea)* — the defensive counterpart to the
+      camera globe: find + fix exposed cameras/IoT on your OWN network (LAN + Exposure), with a
+      responsible-disclosure template. Legal, scoped, on-mission.
+- [ ] **Live threat map** — plot traffic-alerts / honeypot hits on the globe by GeoIP. `[FUN]`
+- [ ] **Ocean currents** (stretch) — a real particle-flow field from NASA OSCAR vectors + a
+      WebGL layer (earlier tile/arrow/canvas attempts were removed as not good enough).
+- [ ] **`atlas.js` refactor** — split the ~1k-line globe file (globe-core / data-layers /
+      camera-windows). The main structural chore; contains the recent globe complexity.
 
 ---
 

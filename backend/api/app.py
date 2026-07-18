@@ -456,24 +456,40 @@ def api_set_mapillary(body: SecretIn):
     return {"ok": True, "mapillary": bool(k)}
 
 
+def _mapillary_get(url: str, tok: str):
+    """GET the Mapillary graph API with the token as an Authorization header (avoids
+    URL-encoding the '|' in the token, which makes Mapillary 500). Returns parsed
+    JSON, or {'_error': msg} on failure with Mapillary's real message when available."""
+    import urllib.request, urllib.error
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "RODE-Toolkit/1.0",
+                                                   "Authorization": "OAuth " + tok})
+        with urllib.request.urlopen(req, timeout=12) as r:
+            return json.loads(r.read().decode("utf-8", "replace"))
+    except urllib.error.HTTPError as he:
+        try:
+            body = he.read().decode("utf-8", "replace")[:160]
+        except Exception:
+            body = ""
+        return {"_error": f"Mapillary {he.code} — {body or he.reason}"}
+    except Exception as e:
+        return {"_error": str(e)[:140]}
+
+
 @app.get("/api/streetview")
 def api_streetview(lat: float, lng: float):
     """Nearest Mapillary street-level image to a point (free, crowd-sourced)."""
     from ..cams import get_secret
-    import urllib.request, urllib.parse
     tok = get_secret("mapillary_token")
     if not tok:
         return {"ok": False, "error": "no Mapillary token set"}
     d = 0.0025      # ~250 m box around the point
     bbox = f"{lng - d},{lat - d},{lng + d},{lat + d}"
-    url = ("https://graph.mapillary.com/images?access_token=" + urllib.parse.quote(tok)
-           + "&fields=id,thumb_1024_url,captured_at,compass_angle,geometry&bbox=" + bbox + "&limit=10")
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "RODE-Toolkit/1.0"})
-        with urllib.request.urlopen(req, timeout=12) as r:
-            data = json.loads(r.read().decode("utf-8", "replace"))
-    except Exception as e:
-        return {"ok": False, "error": str(e)[:140]}
+    url = ("https://graph.mapillary.com/images?"
+           "fields=id,thumb_1024_url,captured_at,compass_angle,geometry&bbox=" + bbox + "&limit=10")
+    data = _mapillary_get(url, tok)
+    if isinstance(data, dict) and data.get("_error"):
+        return {"ok": False, "error": data["_error"]}
     imgs = data.get("data") or []
     if not imgs:
         return {"ok": True, "found": False}
@@ -511,14 +527,11 @@ def api_sv_coverage(bbox: str):
         w, s, e, n = [float(x) for x in bbox.split(",")]
     except Exception:
         return {"ok": False, "error": "bad bbox"}
-    url = ("https://graph.mapillary.com/images?access_token=" + urllib.parse.quote(tok)
-           + "&fields=id,geometry&bbox=" + f"{w},{s},{e},{n}" + "&limit=800")
-    try:
-        req = urllib.request.Request(url, headers={"User-Agent": "RODE-Toolkit/1.0"})
-        with urllib.request.urlopen(req, timeout=12) as r:
-            data = json.loads(r.read().decode("utf-8", "replace"))
-    except Exception as ex:
-        return {"ok": False, "error": str(ex)[:120]}
+    url = ("https://graph.mapillary.com/images?fields=id,geometry&bbox="
+           + f"{w},{s},{e},{n}" + "&limit=500")
+    data = _mapillary_get(url, tok)
+    if isinstance(data, dict) and data.get("_error"):
+        return {"ok": False, "error": data["_error"]}
     pts = []
     for im in (data.get("data") or []):
         try:

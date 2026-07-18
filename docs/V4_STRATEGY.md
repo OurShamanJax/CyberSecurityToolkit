@@ -4,6 +4,10 @@
 "Batcomputer / Palantir-Gotham" it wants to be — for authorized security work.*
 Written 2026-07 · supersedes the earlier V4_DESIGN sketch
 
+> 📜 **Historical planning doc.** Most of what this proposed is now built. For the
+> **current** state of the toolkit read **`PROGRAM_REVIEW.md`** (architecture) and
+> **`STATUS.md`** (what's done / what's left). Kept for the "why" behind the direction.
+
 ---
 
 ## 1. The idea, in one paragraph

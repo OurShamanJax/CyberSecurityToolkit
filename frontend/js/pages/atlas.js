@@ -531,6 +531,7 @@ const CAM_SOURCES=[
   {id:'nb',     name:'New Brunswick 511', bounds:[-69.1, 44.5, -63.7, 48.1]},
   {id:'pei',    name:'PEI 511',           bounds:[-64.5, 45.9, -61.9, 47.1]},
   {id:'nl',     name:'Newfoundland 511',  bounds:[-59.5, 46.5, -52.5, 55.5]},
+  {id:'nzta',   name:'New Zealand (NZTA)', bounds:[166.0, -47.5, 179.2, -34.0]},
 ];
 function viewRectDeg(){ if(!viewer)return null;
   try{ const r=viewer.camera.computeViewRectangle(); if(!r)return null;

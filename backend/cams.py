@@ -247,12 +247,57 @@ def _import_onenetwork(code: str) -> dict:
     return {"ok": True, "added": added, "total": len(rows)}
 
 
+def _import_nzta() -> dict:
+    """New Zealand NZTA / Waka Kotahi traffic cameras — public, no key."""
+    url = "https://trafficnz.info/service/traffic/rest/4/cameras/all"
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": _UA, "Accept": "application/json"})
+        with urllib.request.urlopen(req, timeout=25) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as e:
+        return {"ok": False, "error": f"NZTA: {str(e)[:120]}"}
+    items = []
+    if isinstance(data, dict):
+        items = (data.get("response", {}) or {}).get("camera") or data.get("cameras") or data.get("camera") or []
+    elif isinstance(data, list):
+        items = data
+    rows = [r for r in _load() if (r.get("url") or "").strip() and r.get("src") != "nzta"]
+    seen = {r.get("url") for r in rows}
+    nid = _next_id(rows); added = 0
+    for it in (items or []):
+        if not isinstance(it, dict):
+            continue
+        lat = it.get("latitude", it.get("lat"))
+        lng = it.get("longitude", it.get("lng") or it.get("lon"))
+        img = it.get("imageUrl") or it.get("image") or it.get("url")
+        nm = it.get("name") or it.get("description") or "NZTA cam"
+        try:
+            lat = float(lat); lng = float(lng)
+            if not img or img in seen or not (lat and lng):
+                continue
+            nid += 1; seen.add(img)
+            rows.append({"id": nid, "name": str(nm)[:80], "lat": lat, "lng": lng,
+                         "country": "NZ", "type": "traffic", "url": img,
+                         "video": "", "stream": "jpg", "src": "nzta"})
+            added += 1
+        except Exception:
+            continue
+    if len(rows) > 6000:
+        rows = rows[-6000:]
+    _save(rows)
+    if added == 0:
+        return {"ok": False, "error": "NZTA: no cameras parsed", "added": 0, "total": len(rows)}
+    return {"ok": True, "added": added, "total": len(rows)}
+
+
 def import_source(name: str) -> dict:
     """Bulk-load real, published public cameras from a free/no-account source."""
     if name == "nyc":
         return _import_nyc()
     if name == "caltrans":
         return _import_caltrans()
+    if name == "nzta":
+        return _import_nzta()
     if name in _ONE_NETWORK:
         return _import_onenetwork(name)
     if name != "tfl":

@@ -3,6 +3,10 @@
 *From a local-first learning lab to an all-purpose, responsibly-built security multitool.*
 Draft · supersedes the V3 "local lab" framing · authored 2026-07-10
 
+> 📜 **Superseded / historical.** This early v4 sketch was superseded by `V4_STRATEGY.md`,
+> and most of it is now built. For current state read **`PROGRAM_REVIEW.md`** (architecture)
+> and **`STATUS.md`** (done / to-do). Kept only as an origin record — safe to ignore or delete.
+
 ---
 
 ## 0. How to read this doc
