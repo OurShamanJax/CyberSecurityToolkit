@@ -18,16 +18,19 @@ function esri(path){ return new Cesium.ArcGisMapServerImageryProvider({url:ESRI+
 function typeColor(t){ return COLOR[t] || '#5aa9e6'; }
 
 function shell(){ return `
-<div class="page"><div class="page-h"><h2>Atlas <span class="tag">geo lens</span></h2>
-  <p>A geospatial lens on your investigation: <b>locate</b> any IP or domain, <b>traceroute</b> a target across the globe, and see your investigation's geolocated hosts with their connections. Cameras and satellites are optional layers. Free/no-account sources; needs internet for map tiles.</p></div>
-<div class="page-body" style="padding:0;position:relative">
-  <div id="cesiumViz" style="width:100%;height:calc(100vh - 200px);min-height:460px;background:#05070b"></div>
+<div class="page" style="height:100%">
+<div class="page-body" style="padding:0;position:relative;height:100%">
+  <div id="cesiumViz" style="width:100%;height:100%;min-height:420px;background:#05070b"></div>
   <div id="glbFallback"></div>
 
   <div id="atlasPanel">
     <div class="ap-search">
+      <input id="placeInput" placeholder="fly to place or lat,lng — e.g. Tokyo / 35.68,139.76"/>
+      <button class="sm primary" id="placeGo" title="Fly there"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 2 2 22l10-6 10 6z"/></svg></button>
+    </div>
+    <div class="ap-search">
       <input id="locInput" placeholder="locate IP / domain — e.g. 1.1.1.1"/>
-      <button class="sm primary" id="locGo" title="Locate"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
+      <button class="sm" id="locGo" title="Locate"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg></button>
     </div>
     <div class="ap-row" style="gap:6px"><button class="sm ghost" id="homeBtn" style="flex:1">Home view</button><button class="sm ghost" id="clearBtn" style="flex:1">Clear pins</button></div>
     <label class="ap-row" title="Camera auto-orbit only — satellites keep moving on real time"><input type="checkbox" id="spin" checked/> <span>Auto-rotate globe</span>
@@ -157,6 +160,24 @@ function setMeta(){ const el=$('#cmeta'); if(!el)return;
   if(satEntities.length)bits.push(satEntities.length+' sats'); el.textContent=bits.join(' · '); }
 function nodeCount(){ return overlayEntities.filter(e=>e._node).length; }
 function setInfo(html){ const el=$('#atlasInfo'); if(el) el.innerHTML=html; }
+
+// ── fly to a place name or "lat,lng" (QoL) ──
+function _parseCoords(s){ const m=(s||'').trim().match(/^\s*(-?\d{1,3}(?:\.\d+)?)\s*[, ]\s*(-?\d{1,3}(?:\.\d+)?)\s*$/);
+  if(!m) return null; const lat=+m[1], lng=+m[2];
+  if(lat<-90||lat>90||lng<-180||lng>180) return null; return {lat,lng}; }
+function spinOff(){ spinOn=false; const sc=$('#spin'); if(sc)sc.checked=false; try{ localStorage.setItem('rode.atlasSpin','0'); }catch(_){} }
+async function doFlyTo(q){
+  q=(q||'').trim(); if(!q||!viewer) return;
+  const c=_parseCoords(q);
+  if(c){ spinOff(); flyTo(c.lat,c.lng,45000); setInfo('<b>'+c.lat.toFixed(4)+', '+c.lng.toFixed(4)+'</b><br><span class="muted">coordinates</span>'); return; }
+  setInfo('<span class="muted">searching “'+escapeHtml(q)+'”…</span>');
+  let d; try{ d=await API('/geocode?q='+encodeURIComponent(q)); }catch(e){ setInfo('place lookup failed'); return; }
+  if(!d || !d.ok){ setInfo('<span class="muted">no place found for “'+escapeHtml(q)+'”</span>'); toast('Place not found','warn'); return; }
+  spinOff();
+  if(d.west!=null){ try{ viewer.camera.flyTo({destination:Cesium.Rectangle.fromDegrees(d.west,d.south,d.east,d.north),duration:1.8}); }catch(e){ flyTo(d.lat,d.lng,60000); } }
+  else flyTo(d.lat,d.lng,60000);
+  setInfo('<b>'+escapeHtml(d.name||q)+'</b><br><span class="muted">'+(+d.lat).toFixed(3)+', '+(+d.lng).toFixed(3)+'</span>');
+}
 
 // ── locate an IP/domain ──
 function clearLocate(){ locateEntities.forEach(e=>{try{viewer.entities.remove(e);}catch(_){}}); locateEntities=[]; }
@@ -413,6 +434,8 @@ function delCam(cam){ fetch('/api/cams/'+cam.id,{method:'DELETE'}).then(()=>{ cl
 function mount(root){
   root.innerHTML=shell();
   $('#cmClose').onclick=closeModal; $('#cmBg').onclick=closeModal;
+  $('#placeGo').onclick=()=>doFlyTo($('#placeInput').value);
+  $('#placeInput').onkeydown=e=>{ if(e.key==='Enter') doFlyTo(e.target.value); };
   $('#locGo').onclick=()=>doLocate($('#locInput').value);
   $('#locInput').onkeydown=e=>{ if(e.key==='Enter') doLocate(e.target.value); };
   $('#trGo').onclick=()=>doTrace($('#trInput').value);
@@ -466,4 +489,5 @@ function unmount(){
   cams=[]; camEntities=[]; satEntities=[]; overlayEntities=[]; traceEntities=[]; locateEntities=[];
   importedSources=new Set(); baseLayer=labelLayer=hillLayer=null;
 }
-export default { id:'atlas', label:'Atlas', short:'Atlas', mount, unmount };
+function refresh(){ if(viewer) try{ loadOverlay(); }catch(e){} }
+export default { id:'atlas', label:'Atlas', short:'Atlas', mount, unmount, refresh };

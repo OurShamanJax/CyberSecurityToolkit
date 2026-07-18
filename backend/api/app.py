@@ -430,6 +430,13 @@ def api_traceroute(target: str):
     return nettrace.traceroute(target)
 
 
+@app.get("/api/geocode")
+def api_geocode(q: str):
+    """Free place search (name/state/country) -> point + bbox for the globe."""
+    from .. import nettrace
+    return nettrace.geocode(q)
+
+
 @app.get("/api/exposure")
 def api_exposure(target: str):
     from ..exposure import lookup
@@ -604,20 +611,44 @@ async def ws_capture(ws: WebSocket):
                         asyncio.run_coroutine_threadsafe(ws.send_json({"type": "error", "message": str(e)}), loop)
                         return
                     proc["p"] = p
+                    stats = {"pkts": 0}
+                    errbuf = []
 
                     def errpump():
+                        # Keep the whole stderr tail so we can explain a silent early exit
+                        # (e.g. an invalid -e field prints "Some fields aren't valid" and
+                        # tshark quits — no packets, and it matches no obvious keyword).
                         for el in iter(p.stderr.readline, ""):
                             el = el.strip()
-                            if el and any(k in el.lower() for k in
-                                          ("permission", "error", "npcap", "no interface", "not found", "couldn", "denied", "capture")):
+                            if not el:
+                                continue
+                            errbuf.append(el)
+                            del errbuf[:-8]
+                            if any(k in el.lower() for k in
+                                   ("permission", "error", "npcap", "no interface", "not found",
+                                    "couldn", "denied", "invalid", "aren't valid", "not a valid",
+                                    "unknown", "unrecognized", "syntax", "no such")):
                                 asyncio.run_coroutine_threadsafe(ws.send_json({"type": "error", "message": el[:180]}), loop)
                     threading.Thread(target=errpump, daemon=True).start()
                     for line in iter(p.stdout.readline, ""):
                         pkt = cap.parse_line(line)
                         if not pkt:
                             continue
+                        stats["pkts"] += 1
                         alerts = det.check(pkt)
                         asyncio.run_coroutine_threadsafe(ws.send_json({"type": "pkt", "pkt": pkt, "alerts": alerts}), loop)
+                    # tshark exited. If we never saw a packet, say why instead of a silent empty feed.
+                    if stats["pkts"] == 0:
+                        try: p.wait(timeout=2)
+                        except Exception: pass
+                        import time as _t; _t.sleep(0.2)
+                        tail = " | ".join(errbuf[-3:]) if errbuf else ""
+                        msg2 = ("Capture ended with 0 packets. "
+                                + (("tshark said: " + tail) if tail else
+                                   "Likely no capture privileges (run R.O.D.E as administrator / with Npcap) "
+                                   "or the wrong interface was selected.")
+                                + "  If you just updated R.O.D.E, restart the server so the new capture code loads.")
+                        asyncio.run_coroutine_threadsafe(ws.send_json({"type": "error", "message": msg2[:240]}), loop)
 
                 threading.Thread(target=reader, args=(cap.build_cmd(msg.get("iface")),), daemon=True).start()
                 await ws.send_json({"type": "started"})

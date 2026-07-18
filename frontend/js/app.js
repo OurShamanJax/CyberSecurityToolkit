@@ -1,5 +1,6 @@
 // app.js — boot, IDE tab bar, router, command palette, cross-tool handoff
 import { $, API, S, NM, NOISE, escapeHtml, toast } from './core.js';
+import home from './pages/home.js';
 import investigation from './pages/investigation.js';
 import traffic from './pages/traffic.js';
 import analyzer from './pages/analyzer.js';
@@ -7,7 +8,6 @@ import credentials from './pages/credentials.js';
 import wireless from './pages/wireless.js';
 import exposure from './pages/exposure.js';
 import vpn from './pages/vpn.js';
-import atlas from './pages/atlas.js';
 import exploits from './pages/exploits.js';
 import payloads from './pages/payloads.js';
 import exploit from './pages/exploit.js';
@@ -15,6 +15,7 @@ import report from './pages/report.js';
 import settings, { applySettings } from './pages/settings.js';
 
 const IC = {
+  home:'<path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/><path d="M9 20v-6h6v6"/>',
   investigation:'<circle cx="6" cy="6" r="2.2"/><circle cx="18" cy="7" r="2.2"/><circle cx="12" cy="17" r="2.2"/><path d="M7.6 7.2 10.6 15M16.4 8.6 13.2 15.2"/>',
   traffic:'<path d="M3 12h4l2-7 4 14 2-7h6"/>',
   analyzer:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 13h5"/>',
@@ -29,16 +30,16 @@ const IC = {
   report:'<path d="M14 3H6a1 1 0 0 0-1 1v16a1 1 0 0 0 1 1h12a1 1 0 0 0 1-1V8z"/><path d="M14 3v5h5M8 13h8M8 17h6"/>',
   settings:'<circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/>',
 };
-const PAGES = [investigation, traffic, credentials, wireless, exposure, vpn, atlas, exploit, report, settings];
+const PAGES = [home, investigation, traffic, credentials, wireless, exposure, vpn, exploit, analyzer, report, settings];
 const byId = Object.fromEntries(PAGES.map(p=>[p.id,p]));
 let current = null;
 const $$ = s => [...document.querySelectorAll(s)];
 
 const GROUPS=[
-  {label:'Workspace', ids:['investigation']},
-  {label:'Recon',     ids:['exposure','wireless','atlas']},
+  {label:'Workspace', ids:['home','investigation']},
+  {label:'Recon',     ids:['exposure','wireless']},
   {label:'Offense',   ids:['credentials']},
-  {label:'Defense',   ids:['traffic','vpn']},
+  {label:'Defense',   ids:['traffic','vpn','analyzer']},
   {label:'Exploit',   ids:['exploit']},
   {label:'System',    ids:['report','settings']},
 ];
@@ -48,8 +49,8 @@ function buildSidebar(){
   $$('.side-item').forEach(b=>b.onclick=()=>{ location.hash='#/'+b.dataset.id; });
 }
 function route(){
-  const id=(location.hash.replace('#/','')||'investigation');
-  const page=byId[id]||investigation;
+  const id=(location.hash.replace('#/','')||'home');
+  const page=byId[id]||home;
   if(current && current.unmount) try{ current.unmount(); }catch(e){}
   $('#page').innerHTML=''; current=page;
   $('#pageTitle').textContent=page.label;

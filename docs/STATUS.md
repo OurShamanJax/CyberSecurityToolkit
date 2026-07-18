@@ -74,8 +74,13 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 ### Unify (finish the "one picture" — highest leverage)
 - [x] **Timeline lens** — scrubbable time axis of when entities were discovered, lanes by
       type, Replay animation, click-to-focus in the graph. `[done]`
-- [ ] **Universal inspector** — one detail panel shared by graph, map, and every tool.
-- [ ] Home **dashboard** (command-center screen).
+- [x] **Universal inspector** — shared `js/inspector.js` renderer (the graph popup's look,
+      promoted); Live Traffic packet detail now renders through it; Map + Home reuse it. `[done]`
+- [x] Home **dashboard** — command-center landing page (default route): current investigation
+      summary, top findings, one-click jumps, investigation switcher. `[done]`
+- [x] **Atlas merged into the Map lens** — one globe, not two. Atlas is now the Investigation
+      Map lens (locate / traceroute / cameras / **fly-to place or lat,lng**); the standalone
+      Recon page is retired. Analyzer moved to **Defense**. `[done]`
 
 ### Exploit focus (per the new direction)
 - [x] **Exploit-DB + exploit paths** — Find-exploits from any vuln/service node, exploit nodes
@@ -93,6 +98,11 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - [ ] **Suricata/Zeek** behind Live Traffic. `[WRAP]`
 - [x] **LAN discovery** → graph (tool + one-click button, OUI vendors). `[WRAP]` — done.
 - [ ] gowitness **screenshots on nodes**; **live threat map**. `[WRAP]/[FUN]`
+
+### Globe polish (Atlas / Map lens)
+- [ ] **Satellite viewport → live-feed look** — film grain, scanlines, vignette, HUD framing,
+      subtle drift/jitter to mimic a real downlink. `[FUN]`
+- [ ] **Globe realism** — Cesium ground/sky atmosphere, fog, HDR, sun lighting; guard perf. `[FUN]`
 
 ### Quality of life
 - [ ] Notes + tags on entities; investigation **entity search**.

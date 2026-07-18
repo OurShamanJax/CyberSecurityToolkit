@@ -2,8 +2,9 @@
 import { $, API, S, NM, NOISE, PH, COLOR, escapeHtml, makeTyper, toast,
          runTool, cancelRun, resendConfirmed } from '../core.js';
 import { updateFootprint, ask, show, hide, sendTo } from '../app.js';
+import atlas from './atlas.js';
 
-let cy=null, sel=null, hidden=new Set(), term=null, layout='', zs=false, pickHandler=null, winCleanup=[], mapViewer=null, mapHandler=null, tlTimer=null, lens='graph';
+let cy=null, sel=null, hidden=new Set(), term=null, layout='', zs=false, pickHandler=null, winCleanup=[], mapMounted=false, tlTimer=null, lens='graph';
 
 const HTML=`
 <div class="invwrap" id="invwrap">
@@ -75,13 +76,14 @@ function mount(root){
   if(!S.inv){ term('Create or select an investigation to begin.','sys'); $('#gempty').style.display='flex'; return; }
   term('R.O.D.E v4 ready · '+S.tools.length+' tools · '+S.mode+' mode.','sys');
   refresh();
+  if(S.ctx&&S.ctx.lens){ const l=S.ctx.lens; S.ctx.lens=null; setTimeout(()=>switchLens(l),90); }
 }
 function unmount(){
   document.removeEventListener('keydown', keyHandler);
   if(pickHandler) document.removeEventListener('rode:pick', pickHandler);
   winCleanup.forEach(fn=>{try{fn();}catch(e){}}); winCleanup=[];
-  if(mapHandler){try{mapHandler.destroy();}catch(e){} mapHandler=null;}
-  if(mapViewer){try{mapViewer.destroy();}catch(e){} mapViewer=null;} clearInterval(tlTimer); lens='graph';
+  if(mapMounted){ try{ atlas.unmount(); }catch(e){} mapMounted=false; }
+  clearInterval(tlTimer); lens='graph';
   if(cy){ try{cy.destroy();}catch(e){} cy=null; }
 }
 function keyHandler(e){
@@ -100,7 +102,7 @@ function updateNoiseTag(){
   $('#targetInput').placeholder=PH[t.input_type]||('target — '+t.input_type);
 }
 
-async function refresh(){ await drawGraph(); await loadFindings(); updateFootprint(); if(lens==='map')plotMap(); }
+async function refresh(){ await drawGraph(); await loadFindings(); updateFootprint(); if(lens==='map'&&mapMounted&&atlas.refresh)try{atlas.refresh();}catch(e){} }
 
 function switchLens(mode){
   lens=mode; clearInterval(tlTimer);
@@ -113,36 +115,18 @@ function switchLens(mode){
   $('#invtimeline').style.display=mode==='timeline'?'block':'none';
   const ge=$('#gempty'); if(ge && mode!=='graph') ge.style.display='none';
   if(mode==='graph'){ if(cy)setTimeout(()=>cy.resize(),60); }
-  else if(mode==='map'){ initInvMap(); plotMap(); }
+  else if(mode==='map'){ mountAtlasLens(); }
   else if(mode==='timeline'){ renderTimeline(); }
 }
-function initInvMap(){
-  if(mapViewer || typeof Cesium==='undefined') return;
-  try{ Cesium.Ion.defaultAccessToken=''; }catch(e){}
-  try{
-    mapViewer=new Cesium.Viewer('invmap',{ baseLayerPicker:false,geocoder:false,homeButton:false,sceneModePicker:false,
-      navigationHelpButton:false,animation:false,timeline:false,fullscreenButton:false,infoBox:false,selectionIndicator:false,
-      imageryProvider:new Cesium.ArcGisMapServerImageryProvider({url:'https://services.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer'}),
-      terrainProvider:new Cesium.EllipsoidTerrainProvider() });
-    mapViewer.imageryLayers.addImageryProvider(new Cesium.ArcGisMapServerImageryProvider({url:'https://services.arcgisonline.com/ArcGIS/rest/services/Reference/World_Boundaries_and_Places/MapServer'}));
-    mapViewer.scene.globe.enableLighting=true; mapViewer.scene.backgroundColor=Cesium.Color.fromCssColorString('#05070b');
-    mapHandler=new Cesium.ScreenSpaceEventHandler(mapViewer.scene.canvas);
-    mapHandler.setInputAction(m=>{ const p=mapViewer.scene.pick(m.position); if(p&&p.id&&p.id._ent){ const id=p.id._ent.entity_id; switchLens('graph'); setTimeout(()=>focusEntityById(id),160); } }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
-  }catch(e){ $('#invmap').innerHTML='<div class="muted" style="padding:40px">Map globe failed to init: '+escapeHtml(String(e).slice(0,120))+'</div>'; }
-}
-async function plotMap(){
-  if(!S.inv)return;
-  if(typeof Cesium==='undefined'){ $('#invmap').innerHTML='<div class="muted" style="padding:40px 24px">The Map lens needs the Cesium globe engine (internet for map tiles).</div>'; return; }
-  try{ await fetch('/api/investigations/'+S.inv+'/geolocate',{method:'POST'}); }catch(e){}
-  const g=await API('/graph/'+S.inv); if(!mapViewer)return;
-  mapViewer.entities.removeAll();
-  const pts=g.nodes.filter(n=>n.data.lat!=null && n.data.lng!=null);
-  pts.forEach(n=>{ const e=mapViewer.entities.add({ position:Cesium.Cartesian3.fromDegrees(n.data.lng,n.data.lat,0),
-    point:{pixelSize:11,color:Cesium.Color.fromCssColorString(COLOR[n.data.type]||'#4bb8d0'),outlineColor:Cesium.Color.BLACK,outlineWidth:1,disableDepthTestDistance:Number.POSITIVE_INFINITY},
-    label:{text:_trunc(n.data.label),font:'600 11px sans-serif',fillColor:Cesium.Color.WHITE,pixelOffset:new Cesium.Cartesian2(0,-16),showBackground:true,backgroundColor:Cesium.Color.fromCssColorString('rgba(13,17,23,0.82)'),scale:0.9,disableDepthTestDistance:Number.POSITIVE_INFINITY,translucencyByDistance:new Cesium.NearFarScalar(2.0e6,1.0,2.4e7,0.15)} });
-    e._ent=n.data; });
-  if(pts.length){ try{ mapViewer.zoomTo(mapViewer.entities); }catch(e){} }
-  else toast('No geolocated entities yet — scan a public IP/domain (needs internet)','warn');
+// The Map lens IS Atlas now — the single globe. Mount it lazily into #invmap;
+// it renders the investigation overlay plus locate / traceroute / fly-to /
+// cameras. Torn down in unmount().
+function mountAtlasLens(){
+  if(mapMounted) return;
+  const el=$('#invmap'); if(!el) return;
+  if(typeof Cesium==='undefined'){ el.innerHTML='<div class="muted" style="padding:40px 24px">The Map lens needs the Cesium globe engine (internet for map tiles).</div>'; return; }
+  try{ atlas.mount(el); mapMounted=true; }
+  catch(e){ el.innerHTML='<div class="muted" style="padding:40px">Map failed to load: '+escapeHtml(String(e).slice(0,120))+'</div>'; }
 }
 
 function humanSpan(ms){ const s=ms/1000; if(s<90)return Math.round(s)+'s'; const m=s/60; if(m<90)return Math.round(m)+'m'; const h=m/60; if(h<48)return Math.round(h)+'h'; return Math.round(h/24)+'d'; }

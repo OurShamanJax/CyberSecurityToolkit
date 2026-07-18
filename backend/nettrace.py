@@ -18,6 +18,7 @@ import socket
 import subprocess
 import time
 import urllib.request
+import urllib.parse
 
 _IPV4 = re.compile(r"\b(\d{1,3}\.\d{1,3}\.\d{1,3}\.\d{1,3})\b")
 _HOPNUM = re.compile(r"^\s*(\d+)")
@@ -69,6 +70,35 @@ def locate_rich(value: str):
     if not got:
         return {"ip": ip, "lat": None, "lng": None, "city": "", "country": ""}
     return {"ip": ip, **got}
+
+
+def geocode(q: str) -> dict:
+    """Free place search (OpenStreetMap Nominatim) — name/state/country -> a point
+    plus a bounding box so the globe can frame the area. No key; Nominatim asks
+    for a valid User-Agent and light use, which fits a single-user local tool."""
+    q = (q or "").strip()
+    if not q:
+        return {"ok": False}
+    try:
+        url = ("https://nominatim.openstreetmap.org/search?format=json&limit=1&q="
+               + urllib.parse.quote(q))
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "RODE-Toolkit/1.0 (local security lab; contact: local user)",
+            "Accept-Language": "en"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            arr = json.loads(r.read().decode("utf-8", "replace"))
+        if not arr:
+            return {"ok": False}
+        it = arr[0]
+        out = {"ok": True, "name": (it.get("display_name") or q)[:140],
+               "lat": float(it["lat"]), "lng": float(it["lon"])}
+        bb = it.get("boundingbox")            # [south, north, west, east] (strings)
+        if bb and len(bb) == 4:
+            out.update({"south": float(bb[0]), "north": float(bb[1]),
+                        "west": float(bb[2]), "east": float(bb[3])})
+        return out
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
 
 
 def _traceroute_argv(target: str, max_hops: int) -> list[str] | None:

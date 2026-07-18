@@ -2,6 +2,7 @@
 // clearly-labelled simulated feed otherwise. Play/pause/speed control the DISPLAY
 // (buffer + drain), which works for both real and simulated sources.
 import { $, toast, S, escapeHtml } from '../core.js';
+import { renderInspector } from '../inspector.js';
 let ws=null, mode='sim', playing=false, speed=1, seq=0, rows=[], buffer=[], sel=null, ifaces=[];
 let drainTimer=null, simTimer=null, capStarted=false;
 let lanMap={}, selfIp='', gatewayIp='';
@@ -86,9 +87,17 @@ function addAlert(r){ if(!S.inv){ toast('Create an investigation first','warn');
 function select(id){ sel=id; const r=rows.find(x=>String(x.id)===String(id)); if(!r)return; renderFeed();
   const s=annIP(r.src),d=annIP(r.dst),p=protoInfo(r.proto),k=(r.proto||'').split(' ')[0].toUpperCase();
   const from=s.tag||r.src||'?', to=d.tag||r.dst||'?', gl=GLOSS[k]?(' '+GLOSS[k]):'';
-  $('#detail').innerHTML=`<div style="font-size:13px;line-height:1.55;margin-bottom:9px"><b>${from}</b> → <b>${to}</b><br><span style="color:var(--accent)">${p}</span>.${gl}</div>`+
-    `<div class="muted" style="font-size:11.5px;line-height:1.6">frame #${r.id} · ${r.t} · ${r.len} bytes<br>${r.src||'?'} → ${r.dst||'?'}<br>${escapeHtml(r.info||r.proto||'')}</div>`+
-    (r.alert?`<div style="color:#eaa0a1;margin-top:8px">⚠ ${escapeHtml(r.alert.k)}: ${escapeHtml(r.alert.why)}</div>`:''); }
+  const m={ kind:(k||r.proto||'pkt'), accent:'#6b8bd6',
+    title:`${r.src||'?'} → ${r.dst||'?'}`,
+    chips:[{text:p}, {text:r.len+' B'}],
+    explain:{ t:'What this is', plain:`${from} → ${to}`, why:(p+(gl||'')) },
+    rows:[['frame', `#${r.id} · ${r.t}`], ['raw', r.info||r.proto||'—']] };
+  if(r.alert){ m.chips.push({text:'⚠ '+r.alert.k, cls:'sev high'}); m.explain.fix=null;
+    m.explain.why += `  —  ⚠ ${r.alert.k}: ${r.alert.why}`; }
+  const groups=[];
+  if(r.alert) groups.push({label:'Investigation', items:[{label:'＋ Add alert to graph', onClick:()=>addAlert(r)}]});
+  m.groups=groups;
+  renderInspector($('#detail'), m); }
 
 // ── display control (works for real + simulated) ──
 function startDrain(){ clearInterval(drainTimer); drainTimer=null; if(!playing)return;
