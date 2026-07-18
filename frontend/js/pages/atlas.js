@@ -36,6 +36,11 @@ function shell(){ return `
   <div id="glbFallback"></div>
 
   <div id="atlasPanel">
+    <div id="apHead">
+      <svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px;color:var(--accent)"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3a15 15 0 0 1 0 18M12 3a15 15 0 0 0 0 18"/></svg>
+      <b style="flex:1;font-size:11px;letter-spacing:.4px">GLOBE</b>
+      <button id="apCollapse" title="Collapse / expand" style="background:transparent;border:0;color:var(--mut);cursor:pointer;font-size:13px;line-height:1;padding:0 4px">▾</button>
+    </div>
     <div class="ap-search">
       <input id="placeInput" placeholder="fly to place or lat,lng — e.g. Tokyo / 35.68,139.76"/>
       <button class="sm primary" id="placeGo" title="Fly there"><svg class="ic" viewBox="0 0 24 24" style="width:14px;height:14px"><path d="M12 2 2 22l10-6 10 6z"/></svg></button>
@@ -325,6 +330,18 @@ function updateCompass(){ if(!viewer)return;
   if(!_compassRose)return;
   const deg=Cesium.Math.toDegrees(viewer.camera.heading);
   _compassRose.setAttribute('transform','rotate('+(-deg).toFixed(1)+' 50 50)'); }
+// left tools panel: collapsible + draggable, and above the sat HUD (z-index in CSS)
+function initPanel(){ const ap=$('#atlasPanel'), ah=$('#apHead'); if(!ap||!ah)return;
+  const col=$('#apCollapse');
+  if(col) col.onclick=e=>{ e.stopPropagation(); const c=ap.classList.toggle('collapsed'); col.textContent=c?'▸':'▾'; };
+  ah.addEventListener('mousedown',e=>{ if(e.target.id==='apCollapse')return; e.preventDefault();
+    const host=ap.parentElement.getBoundingClientRect(), r=ap.getBoundingClientRect(), ox=e.clientX-r.left, oy=e.clientY-r.top;
+    ah.style.cursor='grabbing';
+    const mv=ev=>{ ap.style.left=Math.max(0,ev.clientX-host.left-ox)+'px'; ap.style.top=Math.max(0,ev.clientY-host.top-oy)+'px'; ap.style.right='auto'; };
+    const up=()=>{ ah.style.cursor='grab'; document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+}
 function initCompass(){ const el=$('#compass'); if(!el)return; _compassRose=null;
   el.addEventListener('mousedown',e=>{
     const r=el.getBoundingClientRect();
@@ -741,12 +758,17 @@ function openCamWindow(cam){
   if(m.v||m.hls){
     const v=document.createElement('video'); v.autoplay=true; v.muted=true; v.loop=!!m.v; v.playsInline=true; v.controls=true;
     v.style.cssText='width:100%;height:100%;object-fit:contain;background:#000'; body.appendChild(v);
-    if(m.hls){ stat.textContent='live'; if(window.Hls&&window.Hls.isSupported()){ rec.hls=new Hls(); rec.hls.loadSource(m.hls); rec.hls.attachMedia(v); } else { v.src=m.hls; } }
-    else { const bust=()=>m.v+(m.v.includes('?')?'&':'?')+'_='+Date.now(); v.src=bust(); stat.textContent='clip';
+    if(m.hls){ stat.innerHTML='<span style="color:#5fbf8a">● LIVE</span>'; stat.title='Live video stream (HLS)';
+      if(window.Hls&&window.Hls.isSupported()){ rec.hls=new Hls(); rec.hls.loadSource(m.hls); rec.hls.attachMedia(v); } else { v.src=m.hls; } }
+    else { const bust=()=>m.v+(m.v.includes('?')?'&':'?')+'_='+Date.now(); v.src=bust();
+      stat.innerHTML='<span style="color:#6ea8fe">▸ CLIP</span>'; stat.title='Short video clip, reloaded every ~90s';
       rec.timer=setInterval(()=>{ try{ v.src=bust(); v.load(); v.play().catch(()=>{}); }catch(e){} },90000); }
   } else if(m.img){
     const img=document.createElement('img'); img.alt='feed'; img.style.cssText='width:100%;height:100%;object-fit:contain;background:#000'; body.appendChild(img);
-    img.onerror=()=>{ stat.textContent='offline'; }; img.onload=()=>{ stat.textContent='live'; };
+    stat.title='Still snapshot re-fetched every 2.5s (some sources only refresh every 30–60s at the origin)';
+    img.onerror=()=>{ stat.innerHTML='<span style="color:#e0686a">○ OFFLINE</span>'; };
+    img.onload=()=>{ stat.innerHTML='<span style="color:#e0a24b">◉ SNAPSHOT</span> <span class="cw-ref" style="color:#5fbf8a;transition:opacity .6s">↻</span>';
+      const rf=stat.querySelector('.cw-ref'); if(rf) setTimeout(()=>{ try{ rf.style.opacity='0'; }catch(e){} }, 500); };
     const tick=()=>{ if(document.hidden)return; img.src='/api/cams/'+cam.id+'/snapshot?t='+Date.now(); }; tick(); rec.timer=setInterval(tick,2500);
   } else { body.innerHTML='<div style="color:#8b97a5;padding:16px;font-size:12px">No feed set for this point.</div>'; }
   win.querySelector('.cw-x').onclick=()=>closeCamWindow(rec);
@@ -799,6 +821,7 @@ function mount(root){
     else if(!firmsSaved){ toast('Paste your free FIRMS key first','warn'); } };
   initFirms();
   initCompass();
+  initPanel();
   try{ const c=localStorage.getItem('rode.atlasCine'); if(c!==null&&$('#cine'))$('#cine').checked=c==='1'; }catch(e){}
   $('#spin').onchange=e=>{ spinOn=e.target.checked; try{ localStorage.setItem('rode.atlasSpin', spinOn?'1':'0'); }catch(_){} };
   $('#spd').onchange=e=>{ spinSpeed=+e.target.value||1; };

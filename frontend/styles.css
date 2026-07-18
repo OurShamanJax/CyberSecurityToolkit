@@ -345,8 +345,11 @@ body.compact .page-body{padding:14px}
 
 
 /* ── Atlas v2 panel ── */
-#atlasPanel{position:absolute;top:12px;left:12px;z-index:5;width:238px;max-height:calc(100% - 24px);overflow:auto;
-  background:rgba(13,17,23,.82);border:1px solid var(--line);border-radius:11px;padding:11px;display:flex;flex-direction:column;gap:13px}
+#atlasPanel{position:absolute;top:12px;left:12px;z-index:12;width:238px;max-height:calc(100% - 24px);overflow:auto;
+  background:rgba(13,17,23,.9);border:1px solid var(--line);border-radius:11px;padding:11px;display:flex;flex-direction:column;gap:13px}
+#apHead{display:flex;align-items:center;gap:6px;cursor:grab;user-select:none;margin:-2px -2px 0;padding:2px 3px}
+#atlasPanel.collapsed{width:auto;gap:0;overflow:visible}
+#atlasPanel.collapsed>:not(#apHead){display:none}
 #atlasPanel .ap-search{display:flex;gap:6px}
 #atlasPanel .ap-search input{flex:1;font-size:12px;padding:6px 9px;min-width:0}
 .ap-sec{display:flex;flex-direction:column;gap:6px}
