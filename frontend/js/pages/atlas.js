@@ -7,7 +7,8 @@ import { $, API, S, COLOR, escapeHtml, toast } from '../core.js';
 
 let viewer=null, baseLayer=null, labelLayer=null, hillLayer=null, camHandler=null, camDS=null, atlasKey=null;
 let timer=null, satTimer=null, mediaHls=null, viewChangeTimer=null, rainLayer=null;
-let firmsSaved=false, fireDS=null, fireTimer=null, oceanEntities=[], oceanLines=[], oceanLOD='', _hoverSat=null;
+let firmsSaved=false, fireDS=null, fireTimer=null, _hoverSat=null;
+let camWindows=[], _camZ=20;
 let cams=[], camEntities=[], satEntities=[], overlayEntities=[], traceEntities=[], locateEntities=[];
 let importedSources=new Set();
 let spinOn=true, spinSpeed=1, lastInteract=0, modalOpen=false;
@@ -74,7 +75,6 @@ function shell(){ return `
         <label class="ap-row" title="Live global precipitation radar (RainViewer, free)"><input type="checkbox" id="lyRain"/> <span>Precipitation — live radar</span></label>
         <label class="ap-row" title="Active wildfire detections — NASA FIRMS (free key)"><input type="checkbox" id="lyFire"/> <span>Wildfires — active (NASA FIRMS)</span></label>
         <div class="ap-row" style="padding-left:22px;gap:5px"><input id="firmsKey" placeholder="FIRMS key (free, optional)" style="flex:1;min-width:0;font-size:11px;padding:4px 7px"/><button class="sm" id="firmsGo">Save</button></div>
-        <label class="ap-row" title="Major world surface currents as directional arrows"><input type="checkbox" id="lyOcean"/> <span>Ocean currents</span></label>
         <div class="muted" style="font-size:10px;padding-left:22px;line-height:1.5">Day/night &amp; seasons already track real time.</div>
       </div>
     </div>
@@ -92,14 +92,6 @@ function shell(){ return `
       <div style="display:flex;flex-direction:column;justify-content:space-between;font-size:10px;color:#aeb8c4"><span>Intense</span><span>Heavy</span><span>Moderate</span><span>Light</span></div>
     </div>
     <div style="font-size:9.5px;color:#8b97a5;margin-top:8px">live radar · RainViewer</div>
-  </div>
-  <div id="oceanKey" style="display:none;position:absolute;bottom:20px;left:14px;z-index:7;background:rgba(13,17,23,.85);border:1px solid rgba(255,255,255,.12);border-radius:10px;padding:10px 13px;pointer-events:none;font-size:11px;color:#cdd6e0">
-    <div style="font-weight:600;margin-bottom:7px">Ocean currents</div>
-    <div style="display:flex;flex-direction:column;gap:4px;font-size:10.5px">
-      <span><span style="display:inline-block;width:16px;height:3px;border-radius:2px;background:#ff6b5a;margin-right:6px;vertical-align:middle"></span>warm</span>
-      <span><span style="display:inline-block;width:16px;height:3px;border-radius:2px;background:#4aa3ff;margin-right:6px;vertical-align:middle"></span>cold</span>
-      <span style="color:#8b97a5;font-size:9.5px;margin-top:2px">arrow = flow direction</span>
-    </div>
   </div>
   <div id="compass" title="Drag to move · drag the corner to resize · double-click for north-up" style="position:absolute;bottom:74px;left:14px;width:82px;height:82px;z-index:8;cursor:grab;resize:both;overflow:hidden;min-width:58px;min-height:58px;max-width:220px;max-height:220px">
     <svg viewBox="0 0 100 100" style="width:100%;height:100%;display:block;pointer-events:none">
@@ -204,7 +196,7 @@ function initCesium(){
   camHandler.setInputAction(m=>{ const p=viewer.scene.pick(m.position); if(!p||!p.id)return;
     const id=p.id;
     if(Array.isArray(id)){ try{ viewer.flyTo(id,{duration:1.2}); }catch(e){} return; }
-    if(id._cam)openCam(id._cam); else if(id._sat)openSat(id._sat);
+    if(id._cam)openCamWindow(id._cam); else if(id._sat)openSat(id._sat);
     else if(id._fire)showFire(id._fire);
     else if(id._hop)showHop(id._hop); else if(id._node)showNode(id._node); else if(id._loc)showLoc(id._loc);
   }, Cesium.ScreenSpaceEventType.LEFT_CLICK);
@@ -304,61 +296,6 @@ function showFire(f){ setInfo('<b>🔥 Active fire</b><div class="muted" style="
   ' · FRP: '+escapeHtml(String(f.frp||'—'))+' MW<br>'+escapeHtml((f.date||'')+' '+(f.time||''))+' UTC · '+escapeHtml(f.sat||'')+
   '<br><span style="color:#8b97a5">NASA FIRMS detection — a thermal hotspot, not confirmed damage.</span></div>'); }
 
-// ── ocean currents: major surface currents as directional arrows (warm/cold) ──
-// Curated, stable paths (points in flow direction); the arrowhead shows heading.
-const OCEAN_CURRENTS=[
-  {name:'Gulf Stream', warm:true, pts:[[25,-80],[30,-79],[35,-74],[40,-64],[44,-52],[48,-38]]},
-  {name:'North Atlantic Drift', warm:true, pts:[[48,-38],[53,-28],[57,-16],[61,-4],[63,7]]},
-  {name:'Labrador Current', warm:false, pts:[[61,-56],[55,-54],[49,-50],[44,-49]]},
-  {name:'Canary Current', warm:false, pts:[[34,-11],[28,-15],[21,-18],[15,-19]]},
-  {name:'Benguela Current', warm:false, pts:[[-34,18],[-28,14],[-21,11],[-15,11]]},
-  {name:'Agulhas Current', warm:true, pts:[[-26,34],[-31,30],[-36,26],[-39,22]]},
-  {name:'Brazil Current', warm:true, pts:[[-12,-37],[-20,-39],[-29,-48],[-37,-54]]},
-  {name:'Kuroshio', warm:true, pts:[[22,122],[28,128],[33,136],[36,143],[40,152],[42,163]]},
-  {name:'Oyashio', warm:false, pts:[[55,161],[49,153],[43,146]]},
-  {name:'California Current', warm:false, pts:[[47,-126],[40,-124],[34,-121],[27,-115],[23,-111]]},
-  {name:'Humboldt Current', warm:false, pts:[[-41,-75],[-31,-72],[-20,-71],[-10,-79],[-5,-83]]},
-  {name:'East Australian Current', warm:true, pts:[[-25,154],[-31,153],[-37,150],[-40,149]]},
-  {name:'Antarctic Circumpolar', warm:false, pts:[[-56,-70],[-58,-20],[-60,40],[-58,100],[-56,160]]},
-  {name:'N. Equatorial Current', warm:true, pts:[[12,-18],[12,-40],[12,-62]]},
-  {name:'S. Equatorial Current', warm:true, pts:[[-4,10],[-4,-15],[-4,-36]]},
-];
-function _oceanCol(warm){ return Cesium.Color.fromCssColorString(warm?'#ff6b5a':'#4aa3ff').withAlpha(0.95); }
-function setOcean(on){ if(!viewer)return;
-  oceanEntities.forEach(e=>{ try{ viewer.entities.remove(e); }catch(_){} });
-  oceanEntities=[]; oceanLines=[]; oceanLOD='';
-  const key=$('#oceanKey');
-  if(!on){ if(key)key.style.display='none'; return; }
-  OCEAN_CURRENTS.forEach(cur=>{
-    const flat=[]; cur.pts.forEach(p=>{ flat.push(p[1], p[0], 60000); });   // lng,lat,height
-    const line=viewer.entities.add({ polyline:{ positions:Cesium.Cartesian3.fromDegreesArrayHeights(flat),
-      width:8, arcType:Cesium.ArcType.GEODESIC, material:_oceanCol(cur.warm) } });
-    oceanEntities.push(line); oceanLines.push({line, warm:cur.warm});
-    const mid=cur.pts[Math.floor(cur.pts.length/2)];
-    const lbl=viewer.entities.add({ position:Cesium.Cartesian3.fromDegrees(mid[1],mid[0],60000),
-      label:{ text:cur.name, font:'600 10px sans-serif',
-        fillColor:Cesium.Color.fromCssColorString(cur.warm?'#ffb3aa':'#a9d4ff'),
-        outlineColor:Cesium.Color.BLACK, outlineWidth:2, style:Cesium.LabelStyle.FILL_AND_OUTLINE,
-        pixelOffset:new Cesium.Cartesian2(0,-10), scale:0.95,
-        translucencyByDistance:new Cesium.NearFarScalar(6.0e6,1.0,4.0e7,0.3),
-        disableDepthTestDistance:Number.POSITIVE_INFINITY } });
-    oceanEntities.push(lbl);
-  });
-  updateOceanLOD(true);
-  if(key)key.style.display='block';
-}
-// Zoomed out → soft glowing flow lines; zoomed in → explicit direction arrows.
-function updateOceanLOD(force){
-  if(!viewer || !oceanLines.length) return;
-  const mode = camH() < 3.2e6 ? 'arrow' : 'glow';
-  if(mode===oceanLOD && !force) return; oceanLOD=mode;
-  oceanLines.forEach(o=>{ if(!o.line || !o.line.polyline) return;
-    o.line.polyline.material = mode==='arrow'
-      ? new Cesium.PolylineArrowMaterialProperty(_oceanCol(o.warm))
-      : new Cesium.PolylineGlowMaterialProperty({ glowPower:0.28, taperPower:0.9, color:_oceanCol(o.warm) });
-    o.line.polyline.width = mode==='arrow' ? 9 : 14;
-  });
-}
 
 // ── horizon culling: hide icons on the FAR side of the globe (they use
 //    "always on top" so the depth buffer won't hide them). Runs throttled every
@@ -377,7 +314,6 @@ function cullOccluded(){
     camEntities.forEach(cull);
     if(fireDS) fireDS.entities.values.forEach(cull);
     satEntities.forEach(s=>cull(s.e));
-    oceanEntities.forEach(cull);
     locateEntities.forEach(cull); traceEntities.forEach(cull); overlayEntities.forEach(cull);
   }catch(e){}
 }
@@ -681,7 +617,6 @@ async function loadCams(){
 }
 function onViewChanged(){
   clearTimeout(viewChangeTimer);
-  updateOceanLOD();
   const fl=$('#lyFire'); if(fl&&fl.checked){ clearTimeout(fireTimer); fireTimer=setTimeout(()=>loadFires(false),700); }
   viewChangeTimer=setTimeout(async ()=>{ if(!layers.cam)return;
     const imp=await autoImportForView(); if(imp){ try{ const d=await API('/cams'); cams=d.cameras||[]; }catch(e){} }
@@ -779,6 +714,57 @@ function openCam(cam){
 }
 function delCam(cam){ fetch('/api/cams/'+cam.id,{method:'DELETE'}).then(()=>{ closeModal(); toast('Removed','warn'); loadCams(); }); }
 
+// ── floating camera windows: open many feeds at once, drag/resize/close each ──
+function openCamWindow(cam){
+  const host=($('#cesiumViz')&&$('#cesiumViz').parentElement)||document.body;
+  const dup=camWindows.find(w=>w.camId===cam.id);
+  if(dup){ dup.el.style.zIndex=(++_camZ); return; }   // already open → bring to front
+  const n=camWindows.length%8;
+  const win=document.createElement('div');
+  win.style.cssText='position:absolute;z-index:'+(++_camZ)+';left:'+(96+n*26)+'px;top:'+(66+n*26)+'px;width:300px;height:232px;'+
+    'background:#0b0e13;border:1px solid rgba(255,255,255,.16);border-radius:10px;overflow:hidden;resize:both;'+
+    'min-width:180px;min-height:150px;max-width:900px;max-height:700px;box-shadow:0 12px 40px rgba(0,0,0,.55);display:flex;flex-direction:column';
+  win.innerHTML='<div class="cw-bar" style="display:flex;align-items:center;gap:6px;padding:6px 8px;background:#141a22;cursor:grab;flex:0 0 auto;user-select:none">'+
+    '<span style="flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-size:11.5px;color:#dbe3ea">'+escapeHtml(cam.name||'camera')+'</span>'+
+    '<span class="cw-stat" style="font-size:9px;color:#8b97a5"></span>'+
+    '<button class="cw-x" title="Close" style="background:transparent;border:0;color:#c9d3df;cursor:pointer;font-size:16px;line-height:1;padding:0 3px">&times;</button></div>'+
+    '<div class="cw-body" style="flex:1;min-height:0;background:#000;position:relative"></div>';
+  host.appendChild(win);
+  const bar=win.querySelector('.cw-bar'), body=win.querySelector('.cw-body'), stat=win.querySelector('.cw-stat');
+  const rec={el:win, camId:cam.id, timer:null, hls:null};
+  camWindows.push(rec);
+  const m=mediaOf(cam);
+  if(m.v||m.hls){
+    const v=document.createElement('video'); v.autoplay=true; v.muted=true; v.loop=!!m.v; v.playsInline=true; v.controls=true;
+    v.style.cssText='width:100%;height:100%;object-fit:contain;background:#000'; body.appendChild(v);
+    if(m.hls){ stat.textContent='live'; if(window.Hls&&window.Hls.isSupported()){ rec.hls=new Hls(); rec.hls.loadSource(m.hls); rec.hls.attachMedia(v); } else { v.src=m.hls; } }
+    else { const bust=()=>m.v+(m.v.includes('?')?'&':'?')+'_='+Date.now(); v.src=bust(); stat.textContent='clip';
+      rec.timer=setInterval(()=>{ try{ v.src=bust(); v.load(); v.play().catch(()=>{}); }catch(e){} },90000); }
+  } else if(m.img){
+    const img=document.createElement('img'); img.alt='feed'; img.style.cssText='width:100%;height:100%;object-fit:contain;background:#000'; body.appendChild(img);
+    img.onerror=()=>{ stat.textContent='offline'; }; img.onload=()=>{ stat.textContent='live'; };
+    const tick=()=>{ img.src='/api/cams/'+cam.id+'/snapshot?t='+Date.now(); }; tick(); rec.timer=setInterval(tick,1500);
+  } else { body.innerHTML='<div style="color:#8b97a5;padding:16px;font-size:12px">No feed set for this point.</div>'; }
+  win.querySelector('.cw-x').onclick=()=>closeCamWindow(rec);
+  win.addEventListener('mousedown',()=>{ win.style.zIndex=(++_camZ); });
+  bar.addEventListener('mousedown',e=>{ if(e.target.classList.contains('cw-x'))return; e.preventDefault();
+    const hostR=host.getBoundingClientRect(), r=win.getBoundingClientRect(), ox=e.clientX-r.left, oy=e.clientY-r.top;
+    bar.style.cursor='grabbing';
+    const mv=ev=>{ win.style.left=Math.max(0,ev.clientX-hostR.left-ox)+'px'; win.style.top=Math.max(0,ev.clientY-hostR.top-oy)+'px'; };
+    const up=()=>{ bar.style.cursor='grab'; document.removeEventListener('mousemove',mv); document.removeEventListener('mouseup',up); };
+    document.addEventListener('mousemove',mv); document.addEventListener('mouseup',up);
+  });
+  setInfo('<b>'+escapeHtml(cam.name||'camera')+'</b><div class="muted" style="margin-top:3px">'+escapeHtml([cam.type,cam.place||cam.country].filter(Boolean).join(' · '))+'</div><div class="muted" style="font-size:10.5px;margin-top:5px">Opened in a floating window — drag the title bar, resize from the corner, × to close. Open as many as you like.</div>');
+}
+function closeCamWindow(rec){
+  if(rec.timer)clearInterval(rec.timer);
+  if(rec.hls){ try{ rec.hls.destroy(); }catch(e){} }
+  const v=rec.el.querySelector('video'); if(v){ try{ v.pause(); v.removeAttribute('src'); v.load(); }catch(e){} }
+  try{ rec.el.remove(); }catch(e){}
+  camWindows=camWindows.filter(w=>w!==rec);
+}
+function closeAllCamWindows(){ camWindows.slice().forEach(closeCamWindow); }
+
 function mount(root){
   root.innerHTML=shell();
   $('#cmClose').onclick=closeModal; $('#cmBg').onclick=closeModal;
@@ -802,7 +788,6 @@ function mount(root){
   $('#cine').onchange=e=>setCinematic(e.target.checked);
   $('#lyRain').onchange=e=>setRain(e.target.checked);
   $('#lyFire').onchange=e=>setFires(e.target.checked);
-  $('#lyOcean').onchange=e=>setOcean(e.target.checked);
   const fk=$('#firmsKey'); if(fk){ fk.onkeydown=ev=>{ if(ev.key==='Enter') $('#firmsGo').click(); }; }
   $('#firmsGo').onclick=async ()=>{ const val=(fk&&fk.value.trim())||'';
     if(val){ try{ await fetch('/api/secrets/firms',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({key:val})}); }catch(e){}
@@ -850,7 +835,8 @@ function unmount(){
   if(viewer){ try{viewer.destroy();}catch(e){} viewer=null; }
   cams=[]; camEntities=[]; satEntities=[]; overlayEntities=[]; traceEntities=[]; locateEntities=[];
   importedSources=new Set(); baseLayer=labelLayer=hillLayer=rainLayer=null;
-  clearTimeout(fireTimer); fireDS=null; _compassRose=null; oceanEntities=[]; oceanLines=[]; _occluder=null;
+  clearTimeout(fireTimer); fireDS=null; _compassRose=null; _occluder=null;
+  closeAllCamWindows();
 }
 function refresh(){ if(viewer) try{ loadOverlay(); }catch(e){} }
 export default { id:'atlas', label:'Atlas', short:'Atlas', mount, unmount, refresh };

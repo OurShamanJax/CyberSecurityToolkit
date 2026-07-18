@@ -34,13 +34,22 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 - **Wireless** — read-only AP scan (netsh/nmcli), clickable AP actions, router → Nmap. Deauth /
   WPA-handshake are **clearly locked** (impossible on Windows WiFi) with the concrete Linux +
   monitor-mode-adapter path spelled out.
-- **Atlas (v2 — geo lens)** — a CesiumJS globe aimed at YOUR data: **locate** any IP/domain,
-  **traceroute-to-globe** (each hop GeoIP'd, drawn as an arc), and the **investigation
-  overlay** (geolocated hosts + relationship arcs). Left tools/layers panel, Home + Clear,
-  persistent layers. **Worldwide cameras** via Windy (optional free key, stored server-side in
-  gitignored `data/`) + Caltrans/NYC/London no-key feeds, with **marker clustering**.
-  Cameras/satellites are optional layers (off by default); real satellites + simulated
-  viewpoint retained; no-key **hillshade** relief.
+- **Map lens (the globe — formerly Atlas, now the Investigation → Map lens)** — a CesiumJS
+  globe aimed at YOUR data: **locate** any IP/domain, **traceroute-to-globe** (each hop
+  GeoIP'd), the **investigation overlay**, and **fly-to** any place name or lat,lng
+  (free geocoder). Left tools/layers panel, Home + Clear, persistent layers, a **draggable +
+  resizable compass** (double-click = north-up), and **horizon culling** so only the
+  near-hemisphere icons draw (no far-side clutter through the globe).
+  - **Cameras:** worldwide via Windy (optional free key) with a **multi-point viewport sweep**
+    for density, plus no-key government feeds — Caltrans, NYC, London, and the **"One Network"
+    511 family** (10+ US states + Canadian provinces). **Type-classified icons** (highway /
+    intersection / roundabout / metro / bridge / street / webcam) + legend, marker clustering,
+    and **multi-camera floating windows** (open many feeds at once; drag / resize / close each).
+  - **Satellites:** real TLE-driven positions (labels on hover to declutter), simulated
+    cinematic viewpoint (film-grain / scanline / HUD downlink look, clearly labelled SIM).
+  - **Living Earth:** real-time sun/seasons; **Precipitation radar** (RainViewer) + **Wildfires**
+    (NASA FIRMS, optional free key) — both with color keys; atmosphere/fog/HDR realism toggle;
+    no-key hillshade. (Clouds + ocean-currents attempts were removed — see globe-polish notes.)
 - **Credentials** — login auditor (JSON/form) + bundled wordlist; cracked creds → graph.
 - **Live Traffic** — real **tshark** capture + heuristic alerts; simulated fallback;
   buffer+drain play/pause/speed. **Humanized display**: IPs annotated (this PC / your router /
@@ -121,12 +130,19 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
       **Wildfires** (NASA FIRMS active fire detections, optional free key stored server-side
       like Windy) coloured by confidence, viewport-loaded, with a color key + click detail.
       Clouds layer was removed (GIBS tile jank). `[done]`
-- [x] **Ocean currents** — major world surface currents as directional **arrows** (warm=red /
-      cold=blue) with labels + a color key. Curated stable paths, no key. `[done]`
+- [~] **Ocean currents** — removed. Tried directional arrows, glow lines, and a canvas
+      particle flow; none read well without a real global velocity grid + land mask. Parked
+      until it can be a proper dedicated build (NASA OSCAR data + WebGL particle layer).
 - [x] **Compass** — draggable + resizable rose that tracks camera heading; double-click =
       north-up. `[done]`
-- [ ] **Camera-type icons** — done: highway / intersection / roundabout / metro / bridge /
-      street / webcam glyphs + legend. `[done]`
+- [x] **Camera-type icons** — highway / intersection / roundabout / metro / bridge / street /
+      webcam glyphs + legend. `[done]`
+- [x] **Multi-camera floating windows** — click a camera to open its feed in a floating panel;
+      drag / resize / close each; open many at once from different places. `[done]`
+- [x] **Horizon culling** — far-side icons (cameras / fires / sats / pins) hidden every frame
+      so only the hemisphere you're looking at draws. `[done]`
+- [x] **Satellite declutter** — 140 labels hidden by default, name shown on hover. `[done]`
+- [x] **Windy density** — viewport multi-point sweep + quota-guard, fills any country. `[done]`
 
 ### Quality of life
 - [ ] Notes + tags on entities; investigation **entity search**.
