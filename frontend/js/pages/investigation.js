@@ -3,7 +3,7 @@ import { $, API, S, NM, NOISE, PH, COLOR, escapeHtml, makeTyper, toast,
          runTool, cancelRun, resendConfirmed } from '../core.js';
 import { updateFootprint, ask, show, hide, sendTo } from '../app.js';
 
-let cy=null, sel=null, hidden=new Set(), term=null, layout='', zs=false, pickHandler=null, winCleanup=[], mapViewer=null, mapHandler=null, lens='graph';
+let cy=null, sel=null, hidden=new Set(), term=null, layout='', zs=false, pickHandler=null, winCleanup=[], mapViewer=null, mapHandler=null, tlTimer=null, lens='graph';
 
 const HTML=`
 <div class="invwrap" id="invwrap">
@@ -13,6 +13,7 @@ const HTML=`
     <div class="gtools">
       <button class="sm" id="lensGraph">Graph</button>
       <button class="sm ghost" id="lensMap">Map</button>
+      <button class="sm ghost" id="lensTimeline">Timeline</button>
       <span id="graphtools" style="display:inline-flex;gap:7px;margin-left:4px">
         <button class="sm ghost" id="fitBtn" title="Fit to view"><svg class="ic" viewBox="0 0 24 24"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg>Fit</button>
         <button class="icon ghost sm" id="maxGraph" title="Focus graph" aria-label="Focus graph"><svg class="ic" viewBox="0 0 24 24"><path d="M8 3H3v5M21 8V3h-5M3 16v5h5M16 21h5v-5"/></svg></button>
@@ -20,6 +21,7 @@ const HTML=`
       </span>
     </div>
     <div id="invmap" style="position:absolute;inset:0;display:none;z-index:1;background:#05070b"></div>
+    <div id="invtimeline" style="position:absolute;inset:0;display:none;z-index:1;background:var(--surface);overflow:auto;padding:16px 18px"></div>
     <div class="gempty" id="gempty">
       <svg class="ge-ic" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.4"/><circle cx="18" cy="7" r="2.4"/><circle cx="12" cy="17" r="2.4"/><path d="M7.7 7.4 10.4 15M16.6 8.6 13.3 15.4"/></svg>
       <div class="h">No entities yet</div>
@@ -62,6 +64,7 @@ function mount(root){
   $('#resetBtn').onclick=resetGraph;
   $('#lensGraph').onclick=()=>switchLens('graph');
   $('#lensMap').onclick=()=>switchLens('map');
+  $('#lensTimeline').onclick=()=>switchLens('timeline');
   $('#maxGraph').onclick=toggleGraphMax;
   $('#maxSide').onclick=toggleConsoleMax;
   $('#clearConsole').onclick=()=>term.clear();
@@ -78,7 +81,7 @@ function unmount(){
   if(pickHandler) document.removeEventListener('rode:pick', pickHandler);
   winCleanup.forEach(fn=>{try{fn();}catch(e){}}); winCleanup=[];
   if(mapHandler){try{mapHandler.destroy();}catch(e){} mapHandler=null;}
-  if(mapViewer){try{mapViewer.destroy();}catch(e){} mapViewer=null;} lens='graph';
+  if(mapViewer){try{mapViewer.destroy();}catch(e){} mapViewer=null;} clearInterval(tlTimer); lens='graph';
   if(cy){ try{cy.destroy();}catch(e){} cy=null; }
 }
 function keyHandler(e){
@@ -100,14 +103,18 @@ function updateNoiseTag(){
 async function refresh(){ await drawGraph(); await loadFindings(); updateFootprint(); if(lens==='map')plotMap(); }
 
 function switchLens(mode){
-  lens=mode;
+  lens=mode; clearInterval(tlTimer);
   $('#lensGraph').classList.toggle('ghost', mode!=='graph');
   $('#lensMap').classList.toggle('ghost', mode!=='map');
+  $('#lensTimeline').classList.toggle('ghost', mode!=='timeline');
   $('#graphtools').style.display=mode==='graph'?'inline-flex':'none';
-  $('#gfilter').style.display=mode==='map'?'none':'';
+  $('#gfilter').style.display=mode==='graph'?'':'none';
   $('#invmap').style.display=mode==='map'?'block':'none';
+  $('#invtimeline').style.display=mode==='timeline'?'block':'none';
+  const ge=$('#gempty'); if(ge && mode!=='graph') ge.style.display='none';
   if(mode==='graph'){ if(cy)setTimeout(()=>cy.resize(),60); }
-  else { initInvMap(); plotMap(); }
+  else if(mode==='map'){ initInvMap(); plotMap(); }
+  else if(mode==='timeline'){ renderTimeline(); }
 }
 function initInvMap(){
   if(mapViewer || typeof Cesium==='undefined') return;
@@ -136,6 +143,44 @@ async function plotMap(){
     e._ent=n.data; });
   if(pts.length){ try{ mapViewer.zoomTo(mapViewer.entities); }catch(e){} }
   else toast('No geolocated entities yet — scan a public IP/domain (needs internet)','warn');
+}
+
+function humanSpan(ms){ const s=ms/1000; if(s<90)return Math.round(s)+'s'; const m=s/60; if(m<90)return Math.round(m)+'m'; const h=m/60; if(h<48)return Math.round(h)+'h'; return Math.round(h/24)+'d'; }
+async function renderTimeline(){
+  const el=$('#invtimeline'); if(!el) return; clearInterval(tlTimer);
+  if(!S.inv){ el.innerHTML='<div class="muted" style="padding:30px">Select or create an investigation.</div>'; return; }
+  el.innerHTML='<div class="muted" style="padding:16px">building timeline…</div>';
+  let g; try{ g=await API('/graph/'+S.inv); }catch(e){ el.innerHTML=''; return; }
+  const nodes=(g.nodes||[]).map(n=>n.data).filter(n=>n.first_seen);
+  if(!nodes.length){ el.innerHTML='<div class="muted" style="padding:30px">Nothing discovered yet — run some tools and the timeline will show when each thing was found, in order.</div>'; return; }
+  nodes.forEach(n=>{ n._t=Date.parse(n.first_seen)||Date.now(); });
+  nodes.sort((a,b)=>a._t-b._t);
+  const t0=nodes[0]._t, t1=nodes[nodes.length-1]._t, span=Math.max(1000,t1-t0);
+  const types=[...new Set(nodes.map(n=>n.type))];
+  const fmt=ms=>new Date(ms).toLocaleString([], {month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'});
+  const xOf=t=> (2 + ((t-t0)/span)*96);
+  const lanes=types.map(t=>`<div class="tl-lane-row"><span class="dot" style="background:${COLOR[t]||'#4bb8d0'}"></span>${escapeHtml(t)}</div>`).join('');
+  const grid=types.map((t,i)=>`<div class="tl-grid" style="top:${i*34+17}px"></div>`).join('');
+  const dots=nodes.map(n=>{ const x=xOf(n._t), y=types.indexOf(n.type)*34+17;
+    return `<button class="tl-dot" data-eid="${n.entity_id}" data-t="${n._t}" title="${escapeHtml(n.label)} — ${fmt(n._t)}" style="left:${x.toFixed(2)}%;top:${y}px;background:${COLOR[n.type]||'#4bb8d0'}"></button>`; }).join('');
+  el.innerHTML=`
+    <div class="tl-head">
+      <button class="sm" id="tlPlay"><svg class="ic fill" viewBox="0 0 24 24" style="width:12px;height:12px"><path d="M7 5l12 7-12 7z"/></svg> Replay</button>
+      <input type="range" id="tlScrub" min="0" max="1000" value="1000" style="flex:1;min-width:120px"/>
+      <span class="muted" id="tlTime" style="min-width:150px;text-align:right"></span></div>
+    <div class="tl-plot">
+      <div class="tl-lanes" style="height:${types.length*34+18}px">${lanes}</div>
+      <div class="tl-track" id="tlTrack" style="height:${types.length*34+18}px">${grid}<div class="tl-cursor" id="tlCursor"></div>${dots}</div>
+    </div>
+    <div class="tl-axis"><span>${fmt(t0)}</span><span class="muted" style="font-size:11px">${nodes.length} entities over ${humanSpan(span)}</span><span>${fmt(t1)}</span></div>`;
+  const track=$('#tlTrack'), scrub=$('#tlScrub'), cursor=$('#tlCursor'), timeLbl=$('#tlTime');
+  const apply=v=>{ const ct=t0+(v/1000)*span; cursor.style.left=(2+(v/1000)*96)+'%'; if(timeLbl)timeLbl.textContent=fmt(ct);
+    track.querySelectorAll('.tl-dot').forEach(d=>d.classList.toggle('future',(+d.dataset.t)>ct+1)); };
+  scrub.oninput=e=>{ clearInterval(tlTimer); apply(+e.target.value); };
+  apply(1000);
+  $('#tlPlay').onclick=()=>{ clearInterval(tlTimer); let v=0; scrub.value=0; apply(0);
+    tlTimer=setInterval(()=>{ v+=12; if(v>=1000){ v=1000; clearInterval(tlTimer); } scrub.value=v; apply(v); }, 45); };
+  track.querySelectorAll('.tl-dot').forEach(d=>d.onclick=()=>{ const id=+d.dataset.eid; switchLens('graph'); setTimeout(()=>focusEntityById(id),160); });
 }
 function focusEntityById(id){ if(!cy)return; const n=cy.nodes().filter(x=>x.data('entity_id')===id); if(n&&n.length)focusCyNode(n[0]); }
 function _trunc(l){ l=String(l||''); return l.length>24?l.slice(0,23)+'…':l; }

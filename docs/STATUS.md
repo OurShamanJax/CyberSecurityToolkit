@@ -72,8 +72,8 @@ Living checklist of what's shipped and what's next. Pairs with `V4_STRATEGY.md`
 ## 🔜 To Do — next up (ordered)
 
 ### Unify (finish the "one picture" — highest leverage)
-- [ ] **Timeline lens** — scrub/replay when entities were found; linked selection with
-      graph + map.
+- [x] **Timeline lens** — scrubbable time axis of when entities were discovered, lanes by
+      type, Replay animation, click-to-focus in the graph. `[done]`
 - [ ] **Universal inspector** — one detail panel shared by graph, map, and every tool.
 - [ ] Home **dashboard** (command-center screen).
 

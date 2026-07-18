@@ -9,7 +9,8 @@ from collections import Counter
 
 FIELDS = ["frame.number", "frame.time_relative", "ip.src", "ip.dst",
           "_ws.col.Protocol", "frame.len", "tcp.dstport", "dns.qry.name", "_ws.col.Info",
-          "_ws.col.Source", "_ws.col.Destination"]
+          "ipv6.src", "ipv6.dst", "arp.src.proto_ipv4", "arp.dst.proto_ipv4",
+          "eth.src", "eth.dst"]
 
 
 def tshark_path():
@@ -79,8 +80,10 @@ def parse_line(line: str):
     d = dict(zip(FIELDS, parts))
     if not (d["ip.src"] or d["ip.dst"] or d["_ws.col.Protocol"]):
         return None
-    src = d["ip.src"] or d.get("_ws.col.Source", "")
-    dst = d["ip.dst"] or d.get("_ws.col.Destination", "")
+    src = (d["ip.src"] or d.get("ipv6.src", "") or d.get("arp.src.proto_ipv4", "")
+           or d.get("eth.src", ""))
+    dst = (d["ip.dst"] or d.get("ipv6.dst", "") or d.get("arp.dst.proto_ipv4", "")
+           or d.get("eth.dst", ""))
     return {"num": d["frame.number"], "t": d["frame.time_relative"][:8],
             "src": src, "dst": dst, "proto": d["_ws.col.Protocol"],
             "len": d["frame.len"], "dstport": d["tcp.dstport"], "dns": d["dns.qry.name"],

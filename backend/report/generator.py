@@ -14,7 +14,7 @@ from datetime import datetime
 
 from sqlalchemy.orm import Session
 
-from ..models import Investigation, Run, Entity, Finding
+from ..models import Investigation, Run, Entity, Finding, Relationship
 from .knowledge import lookup
 
 SEV_ORDER = {"critical": 0, "high": 1, "medium": 2, "low": 3, "info": 4, "unknown": 5}
@@ -47,6 +47,17 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
     ents = db.query(Entity).filter(Entity.investigation_id == inv_id).all()
     runs = db.query(Run).filter(Run.investigation_id == inv_id) \
              .order_by(Run.created_at.desc()).all()
+
+    # exploit -> the software/tech it was matched against (the attack path)
+    ent_by_id = {e.id: e for e in ents}
+    ids = set(ent_by_id)
+    affected_of = {}
+    if ids:
+        rels = db.query(Relationship).filter(
+            Relationship.source_id.in_(ids), Relationship.target_id.in_(ids)).all()
+        for r in rels:
+            if r.relation_type == "HAS_EXPLOIT":
+                affected_of[r.target_id] = ent_by_id.get(r.source_id)
 
     # De-dupe findings by title, keep the most severe.
     fmap: dict[str, Finding] = {}
@@ -119,6 +130,27 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
                     P.append(f'<li>{_e(step)}</li>')
                 P.append('</ul>')
 
+    # Known exploits & attack paths (from Exploit-DB search)
+    exploits = [e for e in ents if e.type == "exploit"]
+    if exploits:
+        P.append("<h2>Known exploits &amp; attack paths</h2>")
+        P.append('<p class="muted">Public exploits R.O.D.E matched to discovered software via Exploit-DB. '
+                 'These are references to public research, not attacks in themselves - validate them and only '
+                 'use them against systems you own or are authorized to test.</p>')
+        P.append('<table><tr><th>Affected (discovered)</th><th>Exploit</th><th>Platform</th>'
+                 '<th>CVE</th><th>Reference</th></tr>')
+        for e in exploits:
+            m = e.metadata_dict()
+            aff = affected_of.get(e.id)
+            aff_txt = _e(aff.label or aff.value) if aff else '<span class="muted">-</span>'
+            url = m.get("url", "")
+            eid = m.get("id", "")
+            ref = f'<a href="{_e(url)}">EDB-{_e(eid)}</a>' if url else _e(eid)
+            P.append(f'<tr><td>{aff_txt}</td><td>{_e(e.label or e.value)}</td>'
+                     f'<td class="muted">{_e(m.get("platform",""))}</td>'
+                     f'<td class="muted">{_e(m.get("cve",""))}</td><td>{ref}</td></tr>')
+        P.append('</table>')
+
     # Capabilities (from Binary Inspector)
     if caps:
         P.append("<h2>Program capabilities</h2>")
@@ -130,7 +162,7 @@ def build_html(db: Session, inv_id: int) -> tuple[str, str]:
         P.append('</table>')
 
     # Assets
-    other = {k: v for k, v in assets.items() if k not in ("capability", "vulnerability", "secret", "category", "credential", "alert")}
+    other = {k: v for k, v in assets.items() if k not in ("capability", "vulnerability", "secret", "category", "credential", "alert", "exploit")}
     if other:
         P.append("<h2>Assets discovered</h2><table><tr><th>Type</th><th>Count</th><th>Examples</th></tr>")
         for t, items in sorted(other.items(), key=lambda kv: -len(kv[1])):
