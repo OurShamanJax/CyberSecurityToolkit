@@ -18,10 +18,10 @@ function annIP(ip){
   if(ip.indexOf(':')>=0){ const l=ip.toLowerCase();
     if(l.startsWith('ff0')) return {ip,tag:'IPv6 multicast',cls:'m'};
     if(l.startsWith('fe80')) return {ip,tag:'local IPv6',cls:'l'};
-    if(l==='::1') return {ip,tag:'this PC',cls:'self'};
+    if(l==='::1') return {ip,tag:'YOU · this PC',cls:'self'};
     return {ip,tag:'IPv6',cls:''}; }
   const o=ip.split('.').map(Number);
-  if(ip===selfIp||ip==='127.0.0.1') return {ip,tag:'this PC',cls:'self'};
+  if(ip===selfIp||ip==='127.0.0.1') return {ip,tag:'YOU · this PC',cls:'self'};
   if(gatewayIp&&ip===gatewayIp) return {ip,tag:'your router',cls:'gw'};
   const h=lanMap[ip];
   if(h){ const nm=h.hostname||(h.vendor&&!/randomized/.test(h.vendor)?h.vendor:''); return {ip,tag:nm?('your '+nm):'your device',cls:'dev'}; }
@@ -73,8 +73,9 @@ function renderFeed(){ const feed=$('#feed'); if(!feed)return;
   const f=(($('#filt')&&$('#filt').value)||'').toLowerCase();
   const vis=rows.filter(r=>!f||[r.src,r.dst,r.proto,r.summary].join(' ').toLowerCase().includes(f));
   feed.innerHTML=vis.slice(-220).map(r=>{ const s=annIP(r.src),d=annIP(r.dst);
+    const mine=(s.cls==='self'||d.cls==='self')?' mine':'';
     const end=a=>`${a.ip}${a.tag?` <em class="iptag ${a.cls}">${a.tag}</em>`:''}`;
-    return `<div class="tf-row${r.alert?' alert':''}${sel===r.id?' sel':''}" data-id="${r.id}"><span class="t">${r.t}</span><span class="mid"><span class="p" title="${protoInfo(r.proto)}">${r.proto||'?'}</span> ${end(s)} <span class="arr">→</span> ${end(d)}</span><span>${r.len}B</span><span>#${r.id}</span></div>`; }).join('');
+    return `<div class="tf-row${r.alert?' alert':''}${mine}${sel===r.id?' sel':''}" data-id="${r.id}"><span class="t">${r.t}</span><span class="mid"><span class="p" title="${protoInfo(r.proto)}">${r.proto||'?'}</span> ${end(s)} <span class="arr">→</span> ${end(d)}</span><span>${r.len}B</span><span>#${r.id}</span></div>`; }).join('');
   feed.scrollTop=feed.scrollHeight;
   feed.querySelectorAll('.tf-row').forEach(el=>el.onclick=()=>select(el.dataset.id)); }
 function renderAlert(r){ const a=$('#alerts'); if(!a)return; if(a.querySelector('.muted'))a.innerHTML='';
