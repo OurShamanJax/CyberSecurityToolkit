@@ -101,6 +101,20 @@ def geocode(q: str) -> dict:
         return {"ok": False, "error": str(e)[:120]}
 
 
+def revgeocode(lat, lng) -> dict:
+    """Reverse geocode a point to a human address (OpenStreetMap Nominatim, no key)."""
+    try:
+        url = ("https://nominatim.openstreetmap.org/reverse?format=json&zoom=18&lat="
+               + urllib.parse.quote(str(lat)) + "&lon=" + urllib.parse.quote(str(lng)))
+        req = urllib.request.Request(url, headers={
+            "User-Agent": "RODE-Toolkit/1.0 (local security lab)", "Accept-Language": "en"})
+        with urllib.request.urlopen(req, timeout=8) as r:
+            d = json.loads(r.read().decode("utf-8", "replace"))
+        return {"ok": True, "address": (d.get("display_name") or "")[:160]}
+    except Exception as e:
+        return {"ok": False, "error": str(e)[:120]}
+
+
 def _traceroute_argv(target: str, max_hops: int) -> list[str] | None:
     if os.name == "nt":
         exe = shutil.which("tracert") or "tracert"

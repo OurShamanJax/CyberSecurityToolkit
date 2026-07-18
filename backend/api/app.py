@@ -492,6 +492,43 @@ def api_streetview(lat: float, lng: float):
             "token": tok}
 
 
+@app.get("/api/revgeocode")
+def api_revgeocode(lat: float, lng: float):
+    """Reverse-geocode a point to a human address (for the street-view title)."""
+    from .. import nettrace
+    return nettrace.revgeocode(lat, lng)
+
+
+@app.get("/api/streetview/coverage")
+def api_sv_coverage(bbox: str):
+    """Mapillary image points in a bbox 'w,s,e,n' — the 'where you can go' overlay."""
+    from ..cams import get_secret
+    import urllib.request, urllib.parse
+    tok = get_secret("mapillary_token")
+    if not tok:
+        return {"ok": False, "error": "no Mapillary token set"}
+    try:
+        w, s, e, n = [float(x) for x in bbox.split(",")]
+    except Exception:
+        return {"ok": False, "error": "bad bbox"}
+    url = ("https://graph.mapillary.com/images?access_token=" + urllib.parse.quote(tok)
+           + "&fields=id,geometry&bbox=" + f"{w},{s},{e},{n}" + "&limit=800")
+    try:
+        req = urllib.request.Request(url, headers={"User-Agent": "RODE-Toolkit/1.0"})
+        with urllib.request.urlopen(req, timeout=12) as r:
+            data = json.loads(r.read().decode("utf-8", "replace"))
+    except Exception as ex:
+        return {"ok": False, "error": str(ex)[:120]}
+    pts = []
+    for im in (data.get("data") or []):
+        try:
+            c = im["geometry"]["coordinates"]
+            pts.append({"lng": c[0], "lat": c[1], "id": im["id"]})
+        except Exception:
+            pass
+    return {"ok": True, "points": pts, "count": len(pts)}
+
+
 @app.post("/api/secrets/windy")
 def api_set_windy(body: SecretIn):
     """Persist the Windy key in data/secrets.json (gitignored, never committed)."""
